@@ -3,3 +3,4 @@
 *.tsv
 *.csv
 /env
+.env
