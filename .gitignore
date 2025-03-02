@@ -2,5 +2,6 @@
 *.zip
 *.tsv
 *.csv
+/gdg
 /env
 .env
