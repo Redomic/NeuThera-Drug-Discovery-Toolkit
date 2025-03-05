@@ -134,3 +134,7 @@ data/
 TamGen_Demo_Data/*.bin
 TamGen_Demo_Data/*.idx
 TamGen_Demo_Data/src/*
+
+TamGen/TamGen_Demo_Data/*.bin
+TamGen/TamGen_Demo_Data/*.idx
+TamGen/TamGen_Demo_Data/src/*
