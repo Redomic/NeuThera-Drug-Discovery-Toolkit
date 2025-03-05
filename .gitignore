@@ -7,3 +7,11 @@
 .env
 dti_env
 runs
+
+/gpt_model/checkpoint_best.pt
+/checkpoints
+/database/PDBlib
+
+TamGen_Demo_Data/*.bin
+TamGen_Demo_Data/*.idx
+TamGen_Demo_Data/src/*
