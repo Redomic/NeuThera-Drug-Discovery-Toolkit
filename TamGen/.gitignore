@@ -130,3 +130,7 @@ database/PDBlib
 dataset/
 baseline_results/
 data/
+
+TamGen_Demo_Data/*.bin
+TamGen_Demo_Data/*.idx
+TamGen_Demo_Data/src/*
