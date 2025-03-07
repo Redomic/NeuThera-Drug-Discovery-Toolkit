@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  arangodb:
+    container_name: boring_napier
+    image: arangodb/arangodb:3.12.4
+    restart: unless-stopped
+    environment:
+      - ARANGO_ROOT_PASSWORD=openSesame
+    ports:
+      - "8529:8529"
+    command: ["arangod", "--experimental-vector-index", "true"]
+    volumes:
+      - arango_data:/var/lib/arangodb3
+
+volumes:
+  arango_data:
+
