@@ -41,12 +41,6 @@ Install requirements
 pip install -r requirements.txt
 ```
 
-You can check if arangodb is up on
-
-```
-localhost:8529
-```
-
 Create an .env file with the openAI key in root
 
 ```
