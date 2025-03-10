@@ -1,12 +1,20 @@
+<img src="https://i.imgur.com/cnpipY3.png"  width="20%" height="20%">
+
 # NeuThera - AI-Driven Drug Discovery Toolkit
 
 NeuThera is a modular drug discovery starter toolkit, integrating multiple state-of-the-art generative molecular design models such as [TamGen](https://www.nature.com/articles/s41467-024-53632-4), [chemBERTa](https://arxiv.org/abs/2010.09885), and [DeepPurpose](https://arxiv.org/abs/2004.08919) with other advanced tooling like graph-based retrieval, molecular fingerprint embeddings, ADMET profiling, etc. The goal is to create a fully modular agentic AI framework capable of generating, validating, and optimizing novel drug candidates in an end-to-end pipeline - creating and maintaining a graph database of all FDA approved and generated compounds for further repurposing or discovery.
 
 NeuThera supports both **end-to-end drug discovery automation** and **interactive, user-guided drug design workflows**.
 
+Some example generations:
+
+<img src="https://i.imgur.com/JQYUBcZ.png"  width="70%">
+
 ## Get Started
 
-**NOTE:** We have tried to make the installation simple, but due to the usage of multiple new technologies. They might not always work well together for different systems. It's recommended that you use Linux or MacOS for now. Hopefully, in the future we can update this repo to install everything without hurdles. If everything still goes wrong, please message any of the contributors.
+**NOTE:** We have tried to make the installation simple, but due to the usage of multiple new technologies. They might not always work well together for different systems. It's recommended that you use Linux or MacOS for now. Hopefully, in the future we can update this repo to install everything without hurdles. If you get issues with libraries or wheel building, please try installing through conda forge.
+
+If everything still goes wrong, please feel free to message any of the contributors. Any and all contributions are also welcome to make the installation process better.
 
 ### Setting up
 
@@ -123,4 +131,6 @@ NeuThera is architected as a multi-model system, integrating specialized tools a
 
 ## Contibute
 
-We are actively looking for contributors who are interested in this project, DM
+We are actively looking for contributors who are interested in this project, DM Praneeth or me (Jones) :D
+
+[<img src="https://i.imgur.com/oz1xZLN.png"  width="10%" height="10%">](https://www.redomic.in)
