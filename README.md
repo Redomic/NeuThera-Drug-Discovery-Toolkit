@@ -6,7 +6,7 @@ NeuThera is a modular drug discovery starter toolkit, integrating multiple state
 
 NeuThera supports both **end-to-end drug discovery automation** and **interactive, user-guided drug design workflows**.
 
-Some example generations:
+Some example generations (Protein PDB 5ool):
 
 <img src="https://i.imgur.com/JQYUBcZ.png"  width="70%">
 
