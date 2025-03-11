@@ -128,6 +128,10 @@ NeuThera is architected as a multi-model system, integrating specialized tools a
       - Molecular visualization for ligand-protein interactions and generated compounds.
       - Graph-based relationship exploration to analyze drug-target-disease links.
       - Live compound generation and scoring dashboard, enabling real-time feedback on molecular design.
+     
+
+### NOTE
+If you're here from the ArangoDB Hackathon, we ended up having to drop nx-arangodb as it's packages were clashing with TamGen. Sadly, we don't also have CUDA enabled hardware so a lot of cuGraph analytics we had done also had to be dropped
 
 ## Contibute
 
