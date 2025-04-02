@@ -1,5 +1,6 @@
 import os
 import sys
+
 import requests
 import ast
 import json
@@ -7,11 +8,12 @@ import hashlib
 import tempfile
 import re
 
+from typing import Any
 from datetime import datetime
 from glob import glob
 from io import StringIO
 
-from db import db
+from db import db, arango_graph
 
 import pandas as pd
 import numpy as np
@@ -30,6 +32,8 @@ from langchain_openai import ChatOpenAI
 from langchain_community.chains.graph_qa.arangodb import ArangoGraphQAChain
 from langchain.tools import Tool
 from langchain.callbacks.base import BaseCallbackHandler
+
+from pydantic import BaseModel, Field
 
 from Bio.PDB import MMCIFParser
 
@@ -50,8 +54,6 @@ from DeepPurpose import DTI as models
 
 from TamGen_custom import TamGenCustom
 
-import boto3
-
 #================= Models & DB =================
 
 sys.path.append(os.path.abspath("./TamGen"))
@@ -60,7 +62,6 @@ load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-arango_graph = ArangoGraph(db)
 drug_collection = db.collection('drug')
 link_collection = db.collection('drug-protein') 
 
@@ -80,51 +81,46 @@ def _GenerateKey(smiles):
     hash_value = hashlib.sha256(smiles.encode()).hexdigest()[:8]
     return f"GEN:{hash_value}"
 
-def _SanitizeInput(self, d, list_limit):
-        """Sanitize the input dictionary or list.
+def _SanitizeInput(d: Any, list_limit: int) -> Any:
+    """Sanitize the input dictionary or list.
 
-        Sanitizes the input by removing embedding-like values,
-        lists with more than **list_limit** elements, that are mostly irrelevant for
-        generating answers in a LLM context. These properties, if left in
-        results, can occupy significant context space and detract from
-        the LLM's performance by introducing unnecessary noise and cost.
+    Sanitizes the input by removing embedding-like values,
+    lists with more than **list_limit** elements, that are mostly irrelevant for
+    generating answers in a LLM context. These properties, if left in
+    results, can occupy significant context space and detract from
+    the LLM's performance by introducing unnecessary noise and cost.
 
-        Args:
-            d (Any): The input dictionary or list to sanitize.
+    Args:
+        d (Any): The input dictionary or list to sanitize.
+        list_limit (int): The maximum allowed length of lists.
 
-        Returns:
-            Any: The sanitized dictionary or list.
-        """
-
-        if isinstance(d, dict):
-            new_dict = {}
-            for key, value in d.items():
-                if isinstance(value, dict):
-                    sanitized_value = self._sanitize_input(value, list_limit)
+    Returns:
+        Any: The sanitized dictionary or list.
+    """
+    if isinstance(d, dict):
+        new_dict = {}
+        for key, value in d.items():
+            if isinstance(value, dict):
+                sanitized_value = _SanitizeInput(value, list_limit)
+                if sanitized_value is not None:
+                    new_dict[key] = sanitized_value
+            elif isinstance(value, list):
+                if len(value) < list_limit:
+                    sanitized_value = _SanitizeInput(value, list_limit)
                     if sanitized_value is not None:
                         new_dict[key] = sanitized_value
-                elif isinstance(value, list):
-                    if len(value) < list_limit:
-                        sanitized_value = self._sanitize_input(value, list_limit)
-                        if sanitized_value is not None:
-                            new_dict[key] = sanitized_value
-                else:
-                    new_dict[key] = value
-            return new_dict
-        elif isinstance(d, list):
-            if len(d) == 0:
-                return d
-            elif len(d) < list_limit:
-                arr = []
-                for item in d:
-                    sanitized_item = self._sanitize_input(item, list_limit)
-                    if sanitized_item is not None:
-                        arr.append(sanitized_item)
-                return arr
             else:
-                return f"List of {len(d)} elements of type {type(d[0])}"
-        else:
+                new_dict[key] = value
+        return new_dict
+    elif isinstance(d, list):
+        if len(d) == 0:
             return d
+        elif len(d) < list_limit:
+            return [_SanitizeInput(item, list_limit) for item in d if _SanitizeInput(item, list_limit) is not None]
+        else:
+            return f"List of {len(d)} elements of type {type(d[0])}"
+    else:
+        return d
 
 
 # ================= Functions =================
@@ -269,7 +265,7 @@ def FindProteinsFromDrug(drug_name):
 
     return proteins
 
-sanizited_schema = _SanitizeInput(arango_graph.schema, list_limit=32)
+sanizited_schema = _SanitizeInput(d=arango_graph.schema, list_limit=32)
 arango_graph.set_schema(sanizited_schema)
 
 def TextToAQL(query: str):
@@ -321,7 +317,7 @@ def TextToAQL(query: str):
     return str(result["result"])
 
 def PlotSmiles2D(smiles):
-    """Generates and displays a 2D molecular structure from a SMILES string.
+    """Generates and displays a 2D molecular structure from a SMILES string. If you have multiple compounds, use this function one by one for each string
     
     Args:
         smiles (str): SMILES representation of the molecule.
@@ -334,7 +330,7 @@ def PlotSmiles2D(smiles):
         st.write(Draw.MolToImage(mol, size=(300, 300))) 
         return True
     else:
-        raise False
+        return False
 
 def PlotSmiles3D(smiles):
     """Generates an interactive 3D molecular structure from a SMILES string.
@@ -414,27 +410,44 @@ def PlotSmiles3D(smiles):
     else:
         return False    
 
-def PredictBindingAffinity(X_drug, X_target, y=[7.635]):
+def PredictBindingAffinity(input_data, y=[7.635]):
     """
     Predicts the binding affinity for given drug and target sequences.
 
     Parameters:
-    X_drug (list): List containing the SMILES representation of the drug.
-    X_target (list): List containing the amino acid sequence of the protein target.
+    input_data (dict): Dictionary containing:
+        - x_drug (str): SMILES representation of the drug.
+        - x_target (str): Amino acid sequence of the protein target.
 
     Returns:
     float: Predicted binding affinity (log(Kd) or log(Ki)).
     """
 
-    print("Predicting binding affinity: ", X_drug, X_target)
+    if isinstance(input_data, str): 
+        input_data = json.loads(input_data)
+
+    x_drug = input_data.get("x_drug")
+    x_target = input_data.get("x_target")
+
+    if not x_drug or not x_target:
+        raise ValueError("Both x_drug and x_target must be provided in input_data")
+
+    print("Predicting binding affinity: ", x_drug, x_target)
+
+    X_drug = [x_drug]
+    X_target = [x_target]
     
     model = models.model_pretrained(path_dir='DTI_model')
     X_pred = utils.data_process(X_drug, X_target, y, drug_encoding='CNN', target_encoding='CNN', split_method='no_split')
     predictions = model.predict(X_pred)
 
+    print(predictions[0])
+
     with st.sidebar:
         st.markdown(f"**Action Output**")
-        st.text(predictions[0], language="aql")
+        st.markdown(
+            f":green-badge[:material/check_circle: Success] Binding Affinity: {str(predictions[0])}"
+        )
         st.divider()
 
     return predictions[0]
@@ -442,6 +455,10 @@ def PredictBindingAffinity(X_drug, X_target, y=[7.635]):
 def GetAminoAcidSequence(pdb_id):    
     """
     Extracts amino acid sequences from a given PDB structure file in CIF format.
+
+    DO NOT OUTPUT TO THE USER THE RESULT OF THIS FUNCTION.
+
+    If all the user asked for is the amino acid sequence, then say that you successfully extracted it
 
     Args:
         pdb_id (str): pdb id of the protein.
@@ -465,7 +482,9 @@ def GetAminoAcidSequence(pdb_id):
             
     with st.sidebar:
         st.markdown(f"**Action Output**")
-        st.json(sequences, language="aql")
+        st.markdown(
+            f":green-badge[:material/check_circle: Success] Sequences prepared for {pdb_id}"
+        )
         st.divider()
     
     return sequences
@@ -542,24 +561,23 @@ def PreparePDBData(pdb_id):
     os.system(f"python {script_path} tmp_pdb.csv gen_{out_split} -o {DemoDataFolder} -t {thr}")
     os.remove("tmp_pdb.csv")
 
-def GenerateCompounds(pdb_id, num_samples=10, max_seed=30):
+def GenerateCompounds(pdb_id):
     """
     Generates and sorts compounds based on similarity to a reference molecule, 
     all generated compounds are added back to the database for futher inference.
 
     Parameters:
     - pdb_id (str): The PDB ID of the target protein.
-    - num_samples (int): Number of compounds to generate. (DEFAULT=500)
-    - max_seed (int): Maximum seed variations. (DEFAULT=30)
 
     Returns:
     - dict: {
-        'generated': [list of rdkit Mol objects],
-        'reference': rdkit Mol object,
         'reference_smile': SMILE string of the reference compound
         'generated_smiles': [list of SMILES strings, sorted by similarity to reference]
       }
     """
+
+    num_samples=3
+    max_seed=5
 
     print("Generating Compounds for PDB ", pdb_id)
     try:
@@ -568,7 +586,6 @@ def GenerateCompounds(pdb_id, num_samples=10, max_seed=30):
         print(f"Generating {num_samples} compounds...")
 
         with st.sidebar:
-            st.markdown(f"**Action Output**")
             st.markdown(
                 f"Generating {num_samples} compounds..."
             )
@@ -603,13 +620,7 @@ def GenerateCompounds(pdb_id, num_samples=10, max_seed=30):
 
         reference_smile = Chem.MolToSmiles(reference_mol)
 
-        img = Draw.MolsToGridImage([e[0] for e in generated_mols], molsPerRow=5, legends=["idx={}".format(ii) for ii in range(len(generated_mols))])
-
-        with st.sidebar:
-            st.markdown(
-                f":green-badge[:material/check_circle: Success] PDB Data prepared for {pdb_id}"
-            )
-            st.divider()
+        print("Generated smiles:", generated_smiles)
         
         print("Inserting to ArangoDB...")
         for smiles in generated_smiles:
@@ -652,11 +663,31 @@ def GenerateCompounds(pdb_id, num_samples=10, max_seed=30):
                 }
                 link_collection.insert(link_doc)
 
-        st.write(img) 
+        # valid_mols = []
+        # legends = []
+
+        # for i, smiles in enumerate(generated_smiles):
+        #     mol = Chem.MolFromSmiles(smiles)
+        #     if mol:
+        #         valid_mols.append(mol)
+        #         legends.append(f"gen={i}")
+        #     else:
+        #         print(f"Invalid SMILES skipped: {smiles}")
+
+        # if valid_mols:
+        #     img = Draw.MolsToGridImage(valid_mols, molsPerRow=5, legends=legends)
+        #     st.write(img)
+
+
+        with st.sidebar:
+            st.markdown(f"**Action Output**")
+            st.json({
+                "reference_smile": reference_smile,
+                "generated_smiles": generated_smiles
+            })
+            st.divider()
 
         return {
-            "generated": sorted_mols,
-            "reference": reference_mol,
             "reference_smile": reference_smile,
             "generated_smiles": generated_smiles
         }
@@ -773,7 +804,7 @@ find_similar_drugs = Tool(
     description=FindSimilarDrugs.__doc__
 )
 
-initalize_agent_tools = [
+tools = [
     find_drug, 
     find_similar_drugs, 
     text_to_aql, 
@@ -786,19 +817,4 @@ initalize_agent_tools = [
     prepare_pdb_data,
     generate_compounds,
     find_similar_drugs
-]
-
-create_react_agent_tools = [
-    FindDrug,
-    FindSimilarDrugs,
-    TextToAQL,
-    FindProteinsFromDrug,
-    PlotSmiles2D,
-    PlotSmiles3D,
-    PredictBindingAffinity,
-    GetAminoAcidSequence,
-    GetChemBERTaEmbeddings,
-    PreparePDBData,
-    GenerateCompounds,
-    FindSimilarDrugs
-]
+]   

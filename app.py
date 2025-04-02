@@ -8,15 +8,13 @@ from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts.prompt import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 
+from tools import tools
+
 # ================= Application =================
 
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
-
-# Define tools (ensure they are properly set up)
-from tools import tools  # Importing tools correctly
-
 
 class CustomCallbackHandler(BaseCallbackHandler):
     def __init__(self):
@@ -65,6 +63,8 @@ def agent_executor(user_query):
             Tools Available: {tool_names}
             Tools Descriptions: {tools}
             Scratch pad (Previous Reasoning): {agent_scratchpad}
+
+            Wait for your tools to give results before using the next one. DO NOT RE-RUN TOOLS AFTER FAILURE
 
             Think step by step before choosing an action.
 
