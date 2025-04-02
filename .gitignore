@@ -8,6 +8,12 @@
 dti_env
 runs
 
+agent
+.env
+__pycache__
+graph.html
+lib
+
 /gpt_model/checkpoint_best.pt
 /checkpoints
 /database/PDBlib

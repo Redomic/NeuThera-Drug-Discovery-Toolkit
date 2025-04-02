@@ -1,97 +1,116 @@
 import os
-
 import streamlit as st
-
-from tools import tools 
-from db import db
-
-import pandas as pd
-import numpy as np
-
+import json
 from dotenv import load_dotenv
-from langgraph.checkpoint.memory import MemorySaver
-from langchain_community.llms import Bedrock
-from langchain_community.graphs import ArangoGraph
-from langchain.agents import initialize_agent
-from langchain.callbacks.base import BaseCallbackHandler
 
-import boto3
+from langchain_openai import ChatOpenAI
+from langchain.agents import create_react_agent, AgentExecutor
+from langchain_core.prompts.prompt import PromptTemplate
+from langchain.callbacks.base import BaseCallbackHandler
 
 # ================= Application =================
 
 load_dotenv()
-arango_graph = ArangoGraph(db)
-bedrock_client = boto3.client(
-    "bedrock-runtime",
-    region_name=os.getenv("AWS_REGION"),
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-)
+openai_api_key = os.getenv("OPENAI_API_KEY")
+llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
 
-llm = Bedrock(client=bedrock_client, model_id="mistral.mistral-large-2402-v1:0")     
+# Define tools (ensure they are properly set up)
+from tools import tools  # Importing tools correctly
+
+
+class CustomCallbackHandler(BaseCallbackHandler):
+    def __init__(self):
+        super().__init__()
+        self.reasoning_steps = []
+
+    def on_agent_action(self, action, **kwargs):
+        thought = action.log.split('\n')[0].replace('Thought:', '').strip()
+
+        if action.tool == "_Exception":
+            raise ValueError("Agent attempted an invalid action: _Exception")  # 🚨 Stop execution
+        
+        step = {
+            'type': 'thought',
+            'content': f"🤔 **Thought:** {thought}",
+            'tool': action.tool,
+            'input': action.tool_input
+        }
+        self.reasoning_steps.append(step)
+        
+        with st.sidebar:
+            st.markdown(f"**Step {len(self.reasoning_steps)} - Thought**")
+            st.markdown(step['content'])
+            st.markdown(f"🔧 **Action:** {step['tool']}")
+            st.markdown(f"📤 **Input:** `{step['input']}`")
+            st.divider()
+    
+    def on_agent_finish(self, finish, **kwargs):
+        if finish.log:
+            final_answer = finish.log
+            step = {
+                'type': 'answer',
+                'content': f"✅ {final_answer}"
+            }
+            with st.sidebar:
+                st.markdown(f"**Final Answer**")
+                st.success(step['content'])
+                st.divider()
 
 def agent_executor(user_query):
-    reasoning_steps = []
-    
-    class CallbackHandler(BaseCallbackHandler):
-        def on_agent_action(self, action, **kwargs):
-            thought = action.log.split('\n')[0].replace('Thought:', '').strip()
-            print(thought)
-            step = {
-                'type': 'thought',
-                'content': f"🤔 **Thought:** {thought}",
-                'tool': action.tool,
-                'input': action.tool_input
-            }
-            reasoning_steps.append(step)
-            
-            with st.sidebar:
-                st.markdown(f"**Step {len(reasoning_steps)} - Thought**")
-                st.markdown(step['content'])
-                st.markdown(f"🔧 **Action:** {step['tool']}")
-                st.markdown(f"📤 **Input:** `{step['input']}`")
-                st.divider()
-        
-        def on_agent_finish(self, finish, **kwargs):
-            if finish.log:
-                final_answer = finish.log
-                step = {
-                    'type': 'answer',
-                    'content': f"✅ {final_answer}"
-                }
-
-                with st.sidebar:
-                    st.markdown(f"**Final Answer**")
-                    st.success(step['content'])
-                    st.divider()
-
     try:
-        agent = initialize_agent(
-            tools=tools,
-            llm=llm,
-            agent="zero-shot-react-description",
-            verbose=True,
-            callbacks=[CallbackHandler()],
-            handle_parsing_errors=True
+        prompt = PromptTemplate.from_template(
+            """You are an AI assistant. Use the tools provided to answer questions.
+            
+            Question: {input}
+            Tools Available: {tool_names}
+            Tools Descriptions: {tools}
+            Scratch pad (Previous Reasoning): {agent_scratchpad}
+
+            Think step by step before choosing an action.
+
+            If you have enough information to answer the question, respond in the following format:
+            
+            Final Answer: [YOUR FINAL RESPONSE]
+
+            Otherwise, continue reasoning as follows:
+            
+            Thought: [YOUR THOUGHT]
+            Action: [SELECT ONE TOOL NAME]
+            Action Input: [INPUT REQUIRED BY TOOL]
+            """
         )
+        agent = create_react_agent(llm=llm, tools=tools, prompt=prompt)
+
+        # ✅ Instantiate the callback handler before passing it
+        callback_handler = CustomCallbackHandler()
+
+        agent_executor = AgentExecutor(agent=agent, tools=tools, callbacks=[callback_handler], handle_parsing_errors=True)  # ✅ Correctly pass as an instance
         
         # Clear previous steps
         if "reasoning_steps" in st.session_state:
             st.session_state.reasoning_steps = []
-            
-        result = agent.run(user_query)
-        return result, reasoning_steps
+
+        final_state = agent_executor.invoke({"input": user_query})
+
+        print("DEBUG: Final State Output →", final_state)
+
+        output_text = final_state["output"].strip()
+        
+        try:
+            return json.loads(output_text)  # ✅ If JSON, parse it
+        except json.JSONDecodeError:
+            return output_text  # Ensure this matches expected output format
         
     except Exception as e:
+        print(e)
         error_msg = f"❌ Error: {str(e)}"
         st.sidebar.error(error_msg)
-        return error_msg, reasoning_steps
+        return error_msg
 
+
+# Streamlit UI Logic
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-# st.sidebar.title("Reasoning Steps")
-# st.sidebar.divider()
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -106,7 +125,7 @@ if user_input := st.chat_input("Type your drug-related query..."):
     st.sidebar.divider()
 
     with st.spinner("Thinking..."):
-        result, _ = agent_executor(user_input)
+        result = agent_executor(user_input)
 
     with st.chat_message("assistant"):
         st.markdown(result)
