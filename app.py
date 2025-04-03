@@ -1,20 +1,29 @@
 import os
 import streamlit as st
 import json
+import base64
 from dotenv import load_dotenv
+
+from tools import tools
 
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts.prompt import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 
-from tools import tools
+
 
 # ================= Application =================
 
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
+
+def get_base64_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+
+img_base64 = get_base64_image("logo.png")
 
 class CustomCallbackHandler(BaseCallbackHandler):
     def __init__(self):
@@ -25,7 +34,7 @@ class CustomCallbackHandler(BaseCallbackHandler):
         thought = action.log.split('\n')[0].replace('Thought:', '').strip()
 
         if action.tool == "_Exception":
-            raise ValueError("Agent attempted an invalid action: _Exception")  # 🚨 Stop execution
+            raise ValueError("Agent attempted an invalid action: _Exception") 
         
         step = {
             'type': 'thought',
@@ -80,13 +89,10 @@ def agent_executor(user_query):
             """
         )
         agent = create_react_agent(llm=llm, tools=tools, prompt=prompt)
-
-        # ✅ Instantiate the callback handler before passing it
         callback_handler = CustomCallbackHandler()
 
-        agent_executor = AgentExecutor(agent=agent, tools=tools, callbacks=[callback_handler], handle_parsing_errors=True)  # ✅ Correctly pass as an instance
+        agent_executor = AgentExecutor(agent=agent, tools=tools, callbacks=[callback_handler], handle_parsing_errors=True)
         
-        # Clear previous steps
         if "reasoning_steps" in st.session_state:
             st.session_state.reasoning_steps = []
 
@@ -97,9 +103,9 @@ def agent_executor(user_query):
         output_text = final_state["output"].strip()
         
         try:
-            return json.loads(output_text)  # ✅ If JSON, parse it
+            return json.loads(output_text)
         except json.JSONDecodeError:
-            return output_text  # Ensure this matches expected output format
+            return output_text
         
     except Exception as e:
         print(e)
@@ -109,6 +115,27 @@ def agent_executor(user_query):
 
 
 # Streamlit UI Logic
+st.markdown(
+    """
+    <style>
+    /* Change user message to bronze */
+    [data-testid="stChatMessage"]:has(div[data-testid="stMarkdownContainer"]) > div:first-child {
+        background-color: #F3BB4F !important;
+        color: white !important;
+        border-radius: 8px;
+        padding: 10px;
+    }
+
+    [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarAssistant"]) > div:first-child {
+        background-color: #16ADA9 !important;
+        color: white !important;
+        border-radius: 8px;
+        padding: 10px;
+    }
+    """,
+    unsafe_allow_html=True
+)
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -121,12 +148,16 @@ if user_input := st.chat_input("Type your drug-related query..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
 
     st.sidebar.empty()
-    st.sidebar.title("Reasoning Steps")
+    st.sidebar.markdown(f"<div style='text-align: center;'><img src='data:image/png;base64,{img_base64}' width='175'></div>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<h1 style='text-align: center; color: #F3BB4F; font-size: 2rem;'>NeuThera</h1>", unsafe_allow_html=True)
     st.sidebar.divider()
 
     with st.spinner("Thinking..."):
         result = agent_executor(user_input)
-
+    
     with st.chat_message("assistant"):
         st.markdown(result)
+
     st.session_state.messages.append({"role": "assistant", "content": result})
+
+
