@@ -1,44 +1,44 @@
 import os
 import sys
 
-import requests
-import ast
-import json
-import hashlib
-import tempfile
+# import requests
+# import ast
+# import json
+# import hashlib
+# import tempfile
 import re
 
 from typing import Any
-from datetime import datetime
-from glob import glob
-from io import StringIO
+# from datetime import datetime
+# from glob import glob
+# from io import StringIO
 
 from db import db, arango_graph
 
-import pandas as pd
+# import pandas as pd
 import numpy as np
 
 from dotenv import load_dotenv
-from arango import ArangoClient
+# from arango import ArangoClient
 
-from transformers import AutoTokenizer, AutoModel
-import torch
+# from transformers import AutoTokenizer, AutoModel
+# import torch
 
-from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver
-from langchain.llms.bedrock import Bedrock
-from langchain_community.graphs import ArangoGraph
+# from langgraph.prebuilt import create_react_agent
+# from langgraph.checkpoint.memory import MemorySaver
+# from langchain.llms.bedrock import Bedrock
+# from langchain_community.graphs import ArangoGraph
 from langchain_openai import ChatOpenAI
 from langchain_community.chains.graph_qa.arangodb import ArangoGraphQAChain
 from langchain.tools import Tool
 from langchain.callbacks.base import BaseCallbackHandler
 
-from pydantic import BaseModel, Field
+# from pydantic import BaseModel, Field
 
-from Bio.PDB import MMCIFParser
+# from Bio.PDB import MMCIFParser
 
-from rdkit import Chem, DataStructs
-from rdkit.Chem import MACCSkeys
+# from rdkit import Chem, DataStructs
+# from rdkit.Chem import MACCSkeys
 from rdkit.Chem import Draw, AllChem
 
 import plotly.graph_objects as go
@@ -46,13 +46,13 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 import streamlit as st
-import networkx as nx
+# import networkx as nx
 from pyvis.network import Network
 
-from DeepPurpose import utils
-from DeepPurpose import DTI as models
+# from DeepPurpose import utils
+# from DeepPurpose import DTI as models
 
-from TamGen_custom import TamGenCustom
+# from TamGen_custom import TamGenCustom
 
 #================= Models & DB =================
 
@@ -65,21 +65,21 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 drug_collection = db.collection('drug')
 link_collection = db.collection('drug-protein') 
 
-tokenizer = AutoTokenizer.from_pretrained("seyonec/ChemBERTa-zinc-base-v1")
-model = AutoModel.from_pretrained("seyonec/ChemBERTa-zinc-base-v1")
+# tokenizer = AutoTokenizer.from_pretrained("seyonec/ChemBERTa-zinc-base-v1")
+# model = AutoModel.from_pretrained("seyonec/ChemBERTa-zinc-base-v1")
 
-worker = TamGenCustom(
-    data="./TamGen_Demo_Data",
-    ckpt="checkpoints/crossdock_pdb_A10/checkpoint_best.pt",
-    use_conditional=True
-)
+# worker = TamGenCustom(
+#     data="./TamGen_Demo_Data",
+#     ckpt="checkpoints/crossdock_pdb_A10/checkpoint_best.pt",
+#     use_conditional=True
+# )
 
 # ================== Helper ==================
 
-def _GenerateKey(smiles):
-    """Generate a unique _key for the compound using SMILES hash."""
-    hash_value = hashlib.sha256(smiles.encode()).hexdigest()[:8]
-    return f"GEN:{hash_value}"
+# def _GenerateKey(smiles):
+#     """Generate a unique _key for the compound using SMILES hash."""
+#     hash_value = hashlib.sha256(smiles.encode()).hexdigest()[:8]
+#     return f"GEN:{hash_value}"
 
 def _SanitizeInput(d: Any, list_limit: int) -> Any:
     """Sanitize the input dictionary or list.
@@ -410,330 +410,330 @@ def PlotSmiles3D(smiles):
     else:
         return False    
 
-def PredictBindingAffinity(input_data, y=[7.635]):
-    """
-    Predicts the binding affinity for given drug and target sequences.
+# def PredictBindingAffinity(input_data, y=[7.635]):
+#     """
+#     Predicts the binding affinity for given drug and target sequences.
 
-    Parameters:
-    input_data (dict): Dictionary containing:
-        - x_drug (str): SMILES representation of the drug.
-        - x_target (str): Amino acid sequence of the protein target.
+#     Parameters:
+#     input_data (dict): Dictionary containing:
+#         - x_drug (str): SMILES representation of the drug.
+#         - x_target (str): Amino acid sequence of the protein target.
 
-    Returns:
-    float: Predicted binding affinity (log(Kd) or log(Ki)).
-    """
+#     Returns:
+#     float: Predicted binding affinity (log(Kd) or log(Ki)).
+#     """
 
-    if isinstance(input_data, str): 
-        input_data = json.loads(input_data)
+#     if isinstance(input_data, str): 
+#         input_data = json.loads(input_data)
 
-    x_drug = input_data.get("x_drug")
-    x_target = input_data.get("x_target")
+#     x_drug = input_data.get("x_drug")
+#     x_target = input_data.get("x_target")
 
-    if not x_drug or not x_target:
-        raise ValueError("Both x_drug and x_target must be provided in input_data")
+#     if not x_drug or not x_target:
+#         raise ValueError("Both x_drug and x_target must be provided in input_data")
 
-    print("Predicting binding affinity: ", x_drug, x_target)
+#     print("Predicting binding affinity: ", x_drug, x_target)
 
-    X_drug = [x_drug]
-    X_target = [x_target]
+#     X_drug = [x_drug]
+#     X_target = [x_target]
     
-    model = models.model_pretrained(path_dir='DTI_model')
-    X_pred = utils.data_process(X_drug, X_target, y, drug_encoding='CNN', target_encoding='CNN', split_method='no_split')
-    predictions = model.predict(X_pred)
+#     model = models.model_pretrained(path_dir='DTI_model')
+#     X_pred = utils.data_process(X_drug, X_target, y, drug_encoding='CNN', target_encoding='CNN', split_method='no_split')
+#     predictions = model.predict(X_pred)
 
-    print(predictions[0])
+#     print(predictions[0])
 
-    with st.sidebar:
-        st.markdown(f"**Action Output**")
-        st.markdown(
-            f":green-badge[:material/check_circle: Success] Binding Affinity: {str(predictions[0])}"
-        )
-        st.divider()
+#     with st.sidebar:
+#         st.markdown(f"**Action Output**")
+#         st.markdown(
+#             f":green-badge[:material/check_circle: Success] Binding Affinity: {str(predictions[0])}"
+#         )
+#         st.divider()
 
-    return predictions[0]
+#     return predictions[0]
 
-def GetAminoAcidSequence(pdb_id):    
-    """
-    Extracts amino acid sequences from a given PDB structure file in CIF format.
+# def GetAminoAcidSequence(pdb_id):    
+#     """
+#     Extracts amino acid sequences from a given PDB structure file in CIF format.
 
-    DO NOT OUTPUT TO THE USER THE RESULT OF THIS FUNCTION.
+#     DO NOT OUTPUT TO THE USER THE RESULT OF THIS FUNCTION.
 
-    If all the user asked for is the amino acid sequence, then say that you successfully extracted it
+#     If all the user asked for is the amino acid sequence, then say that you successfully extracted it
 
-    Args:
-        pdb_id (str): pdb id of the protein.
+#     Args:
+#         pdb_id (str): pdb id of the protein.
 
-    Returns:
-        dict: A dictionary where keys are chain IDs and values are amino acid sequences.
-    """
+#     Returns:
+#         dict: A dictionary where keys are chain IDs and values are amino acid sequences.
+#     """
 
-    print("Getting Amino Acid sequence for ", pdb_id)
+#     print("Getting Amino Acid sequence for ", pdb_id)
 
-    cif_file_path = f"./database/PDBlib/{pdb_id.lower()}.cif"
+#     cif_file_path = f"./database/PDBlib/{pdb_id.lower()}.cif"
 
-    parser = MMCIFParser(QUIET=True)
-    structure = parser.get_structure("protein", cif_file_path)
+#     parser = MMCIFParser(QUIET=True)
+#     structure = parser.get_structure("protein", cif_file_path)
     
-    sequences = {}
-    for model in structure:
-        for chain in model:
-            seq = "".join(residue.resname for residue in chain if residue.id[0] == " ")
-            sequences[chain.id] = seq 
+#     sequences = {}
+#     for model in structure:
+#         for chain in model:
+#             seq = "".join(residue.resname for residue in chain if residue.id[0] == " ")
+#             sequences[chain.id] = seq 
             
-    with st.sidebar:
-        st.markdown(f"**Action Output**")
-        st.markdown(
-            f":green-badge[:material/check_circle: Success] Sequences prepared for {pdb_id}"
-        )
-        st.divider()
+#     with st.sidebar:
+#         st.markdown(f"**Action Output**")
+#         st.markdown(
+#             f":green-badge[:material/check_circle: Success] Sequences prepared for {pdb_id}"
+#         )
+#         st.divider()
     
-    return sequences
+#     return sequences
 
-def GetChemBERTaEmbeddings(smiles):
-    """
-    Generate a ChemBERTa vector embedding for a given molecule represented as a SMILES string.
+# def GetChemBERTaEmbeddings(smiles):
+#     """
+#     Generate a ChemBERTa vector embedding for a given molecule represented as a SMILES string.
 
-    Args:
-        smiles (str): A valid SMILES representation of a molecule.
+#     Args:
+#         smiles (str): A valid SMILES representation of a molecule.
 
-    Returns:
-        List[float] or None: A 768-dimensional vector as a list of floats if successful, 
-                             otherwise None if the input is invalid.
-    """
+#     Returns:
+#         List[float] or None: A 768-dimensional vector as a list of floats if successful, 
+#                              otherwise None if the input is invalid.
+#     """
     
-    print("Getting vector embedding")
+#     print("Getting vector embedding")
 
-    if not isinstance(smiles, str) or not smiles.strip():
-        return None 
+#     if not isinstance(smiles, str) or not smiles.strip():
+#         return None 
 
-    inputs = tokenizer(smiles, return_tensors="pt", padding=True, truncation=True)
-    with torch.no_grad():
-        outputs = model(**inputs)
+#     inputs = tokenizer(smiles, return_tensors="pt", padding=True, truncation=True)
+#     with torch.no_grad():
+#         outputs = model(**inputs)
 
-    with st.sidebar:
-        st.markdown(f"**Action Output**")
-        st.badge("Success", icon=":material/check:", color="green")
-        st.divider()
+#     with st.sidebar:
+#         st.markdown(f"**Action Output**")
+#         st.badge("Success", icon=":material/check:", color="green")
+#         st.divider()
 
-    return outputs.last_hidden_state.mean(dim=1).tolist()[0]
+#     return outputs.last_hidden_state.mean(dim=1).tolist()[0]
 
-def PreparePDBData(pdb_id):
-    """
-    Checks if the PDB data for the given PDB ID is available.  
-    If not, downloads and processes the data.
+# def PreparePDBData(pdb_id):
+#     """
+#     Checks if the PDB data for the given PDB ID is available.  
+#     If not, downloads and processes the data.
 
-    ALWAYS RUN THIS FUNCTION BEFORE WORKING WITH PDB
+#     ALWAYS RUN THIS FUNCTION BEFORE WORKING WITH PDB
 
-    Args:
-        pdb_id (str): PDB ID of the target structure.
+#     Args:
+#         pdb_id (str): PDB ID of the target structure.
 
-    """
+#     """
 
-    DemoDataFolder="TamGen_Demo_Data"
-    ligand_inchi=None
-    thr=10
+#     DemoDataFolder="TamGen_Demo_Data"
+#     ligand_inchi=None
+#     thr=10
 
-    out_split = pdb_id.lower()
-    FF = glob(f"{DemoDataFolder}/*")
-    for ff in FF:
-        if f"gen_{out_split}" in ff:
-            print(f"{pdb_id} is downloaded")
-            return
+#     out_split = pdb_id.lower()
+#     FF = glob(f"{DemoDataFolder}/*")
+#     for ff in FF:
+#         if f"gen_{out_split}" in ff:
+#             print(f"{pdb_id} is downloaded")
+#             return
     
-    os.makedirs(DemoDataFolder, exist_ok=True)
+#     os.makedirs(DemoDataFolder, exist_ok=True)
     
-    with open("tmp_pdb.csv", "w") as fw:
-        if ligand_inchi is None:
-            print("pdb_id", file=fw)
-            print(f"{pdb_id}", file=fw)
-        else:
-            print("pdb_id,ligand_inchi", file=fw)
-            print(f"{pdb_id},{ligand_inchi}", file=fw)
+#     with open("tmp_pdb.csv", "w") as fw:
+#         if ligand_inchi is None:
+#             print("pdb_id", file=fw)
+#             print(f"{pdb_id}", file=fw)
+#         else:
+#             print("pdb_id,ligand_inchi", file=fw)
+#             print(f"{pdb_id},{ligand_inchi}", file=fw)
     
-    with st.sidebar:
-        st.markdown(f"**Action Output**")
-        st.markdown(
-            f":green-badge[:material/check_circle: Success] PDB Data prepared for {pdb_id}"
-        )
-        st.divider()
+#     with st.sidebar:
+#         st.markdown(f"**Action Output**")
+#         st.markdown(
+#             f":green-badge[:material/check_circle: Success] PDB Data prepared for {pdb_id}"
+#         )
+#         st.divider()
 
-    script_path = os.path.abspath("TamGen/scripts/build_data/prepare_pdb_ids.py")
-    os.system(f"python {script_path} tmp_pdb.csv gen_{out_split} -o {DemoDataFolder} -t {thr}")
-    os.remove("tmp_pdb.csv")
+#     script_path = os.path.abspath("TamGen/scripts/build_data/prepare_pdb_ids.py")
+#     os.system(f"python {script_path} tmp_pdb.csv gen_{out_split} -o {DemoDataFolder} -t {thr}")
+#     os.remove("tmp_pdb.csv")
 
-def GenerateCompounds(pdb_id):
-    """
-    Generates and sorts compounds based on similarity to a reference molecule, 
-    all generated compounds are added back to the database for futher inference.
+# def GenerateCompounds(pdb_id):
+#     """
+#     Generates and sorts compounds based on similarity to a reference molecule, 
+#     all generated compounds are added back to the database for futher inference.
 
-    Parameters:
-    - pdb_id (str): The PDB ID of the target protein.
+#     Parameters:
+#     - pdb_id (str): The PDB ID of the target protein.
 
-    Returns:
-    - dict: {
-        'reference_smile': SMILE string of the reference compound
-        'generated_smiles': [list of SMILES strings, sorted by similarity to reference]
-      }
-    """
+#     Returns:
+#     - dict: {
+#         'reference_smile': SMILE string of the reference compound
+#         'generated_smiles': [list of SMILES strings, sorted by similarity to reference]
+#       }
+#     """
 
-    num_samples=3
-    max_seed=5
+#     num_samples=3
+#     max_seed=5
 
-    print("Generating Compounds for PDB ", pdb_id)
-    try:
-        worker.reload_data(subset=f"gen_{pdb_id.lower()}")
+#     print("Generating Compounds for PDB ", pdb_id)
+#     try:
+#         worker.reload_data(subset=f"gen_{pdb_id.lower()}")
 
-        print(f"Generating {num_samples} compounds...")
+#         print(f"Generating {num_samples} compounds...")
 
-        with st.sidebar:
-            st.markdown(
-                f"Generating {num_samples} compounds..."
-            )
-            st.divider()
+#         with st.sidebar:
+#             st.markdown(
+#                 f"Generating {num_samples} compounds..."
+#             )
+#             st.divider()
 
-        generated_mols, reference_mol = worker.sample(
-            m_sample=num_samples, 
-            maxseed=max_seed
-        )
+#         generated_mols, reference_mol = worker.sample(
+#             m_sample=num_samples, 
+#             maxseed=max_seed
+#         )
 
-        if reference_mol:
-            if isinstance(reference_mol, str):
-                reference_mol = Chem.MolFromSmiles(reference_mol)
+#         if reference_mol:
+#             if isinstance(reference_mol, str):
+#                 reference_mol = Chem.MolFromSmiles(reference_mol)
 
-            fp_ref = MACCSkeys.GenMACCSKeys(reference_mol)
+#             fp_ref = MACCSkeys.GenMACCSKeys(reference_mol)
 
-            gens = []
-            for mol in generated_mols:
-                if isinstance(mol, str):
-                    mol = Chem.MolFromSmiles(mol)
-                if mol:
-                    fp = MACCSkeys.GenMACCSKeys(mol)
-                    similarity = DataStructs.FingerprintSimilarity(fp_ref, fp, metric=DataStructs.TanimotoSimilarity)
-                    gens.append((mol, similarity))
+#             gens = []
+#             for mol in generated_mols:
+#                 if isinstance(mol, str):
+#                     mol = Chem.MolFromSmiles(mol)
+#                 if mol:
+#                     fp = MACCSkeys.GenMACCSKeys(mol)
+#                     similarity = DataStructs.FingerprintSimilarity(fp_ref, fp, metric=DataStructs.TanimotoSimilarity)
+#                     gens.append((mol, similarity))
 
-            sorted_mols = [mol for mol, _ in sorted(gens, key=lambda e: e[1], reverse=True)]
+#             sorted_mols = [mol for mol, _ in sorted(gens, key=lambda e: e[1], reverse=True)]
         
-        else:
-            sorted_mols = generated_mols
+#         else:
+#             sorted_mols = generated_mols
 
-        generated_smiles = [Chem.MolToSmiles(mol) for mol in sorted_mols if mol]
+#         generated_smiles = [Chem.MolToSmiles(mol) for mol in sorted_mols if mol]
 
-        reference_smile = Chem.MolToSmiles(reference_mol)
+#         reference_smile = Chem.MolToSmiles(reference_mol)
 
-        print("Generated smiles:", generated_smiles)
+#         print("Generated smiles:", generated_smiles)
         
-        print("Inserting to ArangoDB...")
-        for smiles in generated_smiles:
-            _key = _GenerateKey(smiles) 
-            drug_id = f"drug/{_key}"
-            protein_id = f"protein/{pdb_id}"
+#         print("Inserting to ArangoDB...")
+#         for smiles in generated_smiles:
+#             _key = _GenerateKey(smiles) 
+#             drug_id = f"drug/{_key}"
+#             protein_id = f"protein/{pdb_id}"
 
-            if drug_collection.has(_key):
-                continue
+#             if drug_collection.has(_key):
+#                 continue
 
-            embedding = GetChemBERTaEmbeddings(smiles)
-            doc = {
-                "_key": _key,
-                "_id": drug_id, 
-                "accession": "NaN",
-                "drug_name": "NaN",
-                "cas": "NaN",
-                "unii": "NaN",
-                "synonym": "NaN",
-                "key": "NaN",
-                "chembl": "NaN",
-                "smiles": smiles,
-                "inchi": "NaN",
-                "generated": True,
-                "embedding": embedding
-            }
-            drug_collection.insert(doc)
+#             embedding = GetChemBERTaEmbeddings(smiles)
+#             doc = {
+#                 "_key": _key,
+#                 "_id": drug_id, 
+#                 "accession": "NaN",
+#                 "drug_name": "NaN",
+#                 "cas": "NaN",
+#                 "unii": "NaN",
+#                 "synonym": "NaN",
+#                 "key": "NaN",
+#                 "chembl": "NaN",
+#                 "smiles": smiles,
+#                 "inchi": "NaN",
+#                 "generated": True,
+#                 "embedding": embedding
+#             }
+#             drug_collection.insert(doc)
 
-            existing_links = list(db.aql.execute(f'''
-                FOR link IN `drug-protein` 
-                FILTER link._from == "{drug_id}" AND link._to == "{protein_id}" 
-                RETURN link
-            '''))
+#             existing_links = list(db.aql.execute(f'''
+#                 FOR link IN `drug-protein` 
+#                 FILTER link._from == "{drug_id}" AND link._to == "{protein_id}" 
+#                 RETURN link
+#             '''))
 
-            if not existing_links:
-                link_doc = {
-                    "_from": drug_id,
-                    "_to": protein_id,
-                    "generated": True
-                }
-                link_collection.insert(link_doc)
+#             if not existing_links:
+#                 link_doc = {
+#                     "_from": drug_id,
+#                     "_to": protein_id,
+#                     "generated": True
+#                 }
+#                 link_collection.insert(link_doc)
 
-        valid_mols = []
-        legends = []
+#         valid_mols = []
+#         legends = []
 
-        for i, smiles in enumerate(generated_smiles):
-            mol = Chem.MolFromSmiles(smiles)
-            if mol:
-                valid_mols.append(mol)
-                legends.append(f"gen={i}")
-            else:
-                print(f"Invalid SMILES skipped: {smiles}")
+#         for i, smiles in enumerate(generated_smiles):
+#             mol = Chem.MolFromSmiles(smiles)
+#             if mol:
+#                 valid_mols.append(mol)
+#                 legends.append(f"gen={i}")
+#             else:
+#                 print(f"Invalid SMILES skipped: {smiles}")
 
-        if valid_mols:
-            img = Draw.MolsToGridImage(valid_mols, molsPerRow=5, legends=legends)
-            st.write(img)
+#         if valid_mols:
+#             img = Draw.MolsToGridImage(valid_mols, molsPerRow=5, legends=legends)
+#             st.write(img)
 
-        with st.sidebar:
-            st.markdown(f"**Action Output**")
-            st.json({
-                "reference_smile": reference_smile,
-                "generated_smiles": generated_smiles
-            })
-            st.divider()
+#         with st.sidebar:
+#             st.markdown(f"**Action Output**")
+#             st.json({
+#                 "reference_smile": reference_smile,
+#                 "generated_smiles": generated_smiles
+#             })
+#             st.divider()
 
-        return {
-            "reference_smile": reference_smile,
-            "generated_smiles": generated_smiles
-        }
+#         return {
+#             "reference_smile": reference_smile,
+#             "generated_smiles": generated_smiles
+#         }
 
-    except Exception as e:
-        print(f"Error in compound generation: {str(e)}")
-        return {"error": str(e)}
+#     except Exception as e:
+#         print(f"Error in compound generation: {str(e)}")
+#         return {"error": str(e)}
     
-def FindSimilarDrugs(smile, top_k=6):
-    """
-    Finds the top K most similar drugs based on given smile of a query molecule. Automatically gets vector embeddings.
+# def FindSimilarDrugs(smile, top_k=6):
+#     """
+#     Finds the top K most similar drugs based on given smile of a query molecule. Automatically gets vector embeddings.
 
-    Args:
-        smile (string): Smile of the query molecule.
-        top_k (int, optional): Number of most similar drugs to retrieve. Default is 5.
+#     Args:
+#         smile (string): Smile of the query molecule.
+#         top_k (int, optional): Number of most similar drugs to retrieve. Default is 5.
 
-    Returns:
-        List[Dict{str, [float]}]: A list of (drug_name, similarity_score) sorted by similarity.
-    """
+#     Returns:
+#         List[Dict{str, [float]}]: A list of (drug_name, similarity_score) sorted by similarity.
+#     """
     
-    print("Finding similar drugs...")
+#     print("Finding similar drugs...")
 
-    embedding = GetChemBERTaEmbeddings(smile)
+#     embedding = GetChemBERTaEmbeddings(smile)
     
-    aql_query = f"""
-    LET query_vector = @query_vector
-    FOR doc IN drug
-        LET score = COSINE_SIMILARITY(doc.embedding, query_vector)
-        SORT score DESC
-        LIMIT @top_k
-        RETURN {{ drug: doc._key, similarity_score: score }}
-    """
+#     aql_query = f"""
+#     LET query_vector = @query_vector
+#     FOR doc IN drug
+#         LET score = COSINE_SIMILARITY(doc.embedding, query_vector)
+#         SORT score DESC
+#         LIMIT @top_k
+#         RETURN {{ drug: doc._key, similarity_score: score }}
+#     """
     
-    cursor = db.aql.execute(aql_query, bind_vars={"query_vector": embedding, "top_k": top_k})
-    results = list(cursor)
+#     cursor = db.aql.execute(aql_query, bind_vars={"query_vector": embedding, "top_k": top_k})
+#     results = list(cursor)
 
-    if results:
-        df = pd.DataFrame(results)
-        st.table(df)
-        with st.sidebar:
-            st.markdown(f"**Action Output**")
-            st.code(aql_query, language="aql")
-            st.json(results)
-            st.divider()
-        return results
+#     if results:
+#         df = pd.DataFrame(results)
+#         st.table(df)
+#         with st.sidebar:
+#             st.markdown(f"**Action Output**")
+#             st.code(aql_query, language="aql")
+#             st.json(results)
+#             st.divider()
+#         return results
     
-    return results
+#     return results
 
 # ================= Tooling Wrapper =================
 
@@ -767,53 +767,52 @@ plot_smiles_3d = Tool(
     description=PlotSmiles3D.__doc__
 )
 
-predict_binding_affinity = Tool(
-    name="PredictBindingAffinity",
-    func=PredictBindingAffinity,
-    description=PredictBindingAffinity.__doc__
-)
+# predict_binding_affinity = Tool(
+#     name="PredictBindingAffinity",
+#     func=PredictBindingAffinity,
+#     description=PredictBindingAffinity.__doc__
+# )
 
-get_amino_acid_sequence = Tool(
-    name="GetAminoAcidSequence",
-    func=GetAminoAcidSequence,
-    description=GetAminoAcidSequence.__doc__
-)
+# get_amino_acid_sequence = Tool(
+#     name="GetAminoAcidSequence",
+#     func=GetAminoAcidSequence,
+#     description=GetAminoAcidSequence.__doc__
+# )
 
-get_chemberta_embeddings = Tool(
-    name="GetChemBERTaEmbeddings",
-    func=GetChemBERTaEmbeddings,
-    description=GetChemBERTaEmbeddings.__doc__
-)
+# get_chemberta_embeddings = Tool(
+#     name="GetChemBERTaEmbeddings",
+#     func=GetChemBERTaEmbeddings,
+#     description=GetChemBERTaEmbeddings.__doc__
+# )
 
-prepare_pdb_data = Tool(
-    name="PreparePDBData",
-    func=PreparePDBData,
-    description=PreparePDBData.__doc__
-)
+# prepare_pdb_data = Tool(
+#     name="PreparePDBData",
+#     func=PreparePDBData,
+#     description=PreparePDBData.__doc__
+# )
 
-generate_compounds = Tool(
-    name="GenerateCompounds",
-    func=GenerateCompounds,
-    description=GenerateCompounds.__doc__
-)
+# generate_compounds = Tool(
+#     name="GenerateCompounds",
+#     func=GenerateCompounds,
+#     description=GenerateCompounds.__doc__
+# )
 
-find_similar_drugs = Tool(
-    name="FindSimilarDrugs",
-    func=FindSimilarDrugs,
-    description=FindSimilarDrugs.__doc__
-)
+# find_similar_drugs = Tool(
+#     name="FindSimilarDrugs",
+#     func=FindSimilarDrugs,
+#     description=FindSimilarDrugs.__doc__
+# )
 
 tools = [
     find_drug, 
-    find_similar_drugs, 
+    # find_similar_drugs, 
     text_to_aql, 
     find_proteins_from_drug, 
     plot_smiles_2d, 
     plot_smiles_3d,
-    predict_binding_affinity,
-    get_amino_acid_sequence,
-    get_chemberta_embeddings,
-    prepare_pdb_data,
-    generate_compounds,
-    find_similar_drugs
+    # predict_binding_affinity,
+    # get_amino_acid_sequence,
+    # get_chemberta_embeddings,
+    # prepare_pdb_data,
+    # generate_compounds,
 ]   

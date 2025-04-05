@@ -11,8 +11,6 @@ from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts.prompt import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 
-
-
 # ================= Application =================
 
 load_dotenv()
@@ -159,5 +157,3 @@ if user_input := st.chat_input("Type your drug-related query..."):
         st.markdown(result)
 
     st.session_state.messages.append({"role": "assistant", "content": result})
-
-
