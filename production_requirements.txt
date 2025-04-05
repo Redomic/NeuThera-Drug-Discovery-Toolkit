@@ -1,0 +1,12 @@
+python-dotenv
+numpy
+rdkit-pypi
+plotly
+streamlit
+pyvis
+arango
+langchain
+langchain-core
+langchain-community
+langchain-openai
+openai 
