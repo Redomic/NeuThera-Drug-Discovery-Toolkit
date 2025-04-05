@@ -8,8 +8,6 @@ NeuThera supports both **end-to-end drug discovery automation** and **interactiv
 
 Some example generations (Protein PDB 5ool):
 
-<img src="https://i.imgur.com/JQYUBcZ.png"  width="70%">
-
 ## Get Started
 
 **NOTE:** We have tried to make the installation simple, but due to the usage of multiple new technologies. They might not always work well together for different systems. It's recommended that you use Linux or MacOS for now. Hopefully, in the future we can update this repo to install everything without hurdles. If you get issues with libraries or wheel building, please try installing through conda forge.
@@ -57,6 +55,11 @@ OPENAI_API_KEY=sk-proj-XXXXXXXXXXXXXX
 
 Rest of the work gets done by the notebook 😎
 Run the cells in **start.ipynb**
+and then run the streamlit app using
+
+```
+python -m streamlit run app.py
+```
 
 OPTIONAL: If you want to work with vector embeddings, you'll need to create ArangoDB's expiremental vector index. Run these commands after the preprocessing section of the notebook
 
