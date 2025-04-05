@@ -134,6 +134,20 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+st.chat_message("assistant").markdown(
+    "👋 **Welcome to NeuThera!**\n\n"
+    "You're currently using the **MVP** version of the app, which only includes a limited set of drug discovery tools. (Mostly due to limited resources)\n\n"
+    "- **FindDrug** - Search for known drugs based on biomedical data\n"
+    "- **FindProteinsFromDrug** - Discover target proteins linked to a drug\n"
+    "- **PlotSmiles2D** - Visualize molecules from SMILES in 2D\n" \
+    "- **PlotSmiles3D** - Generate interactive 3D molecular structures\n\n" \
+    "Here are some Queries to try:\n"
+    "- 'Find me details for the drug NADH'\n"
+    "- 'Find me proteins related to NADH\n"
+    "- 'Plot NADH in 3D\n"
+    "- 'plot NADH in 3D\n"
+)
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
