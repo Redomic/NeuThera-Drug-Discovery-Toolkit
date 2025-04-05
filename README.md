@@ -47,10 +47,10 @@ Install requirements
 pip install -r requirements.txt
 ```
 
-Create an .env file with the openAI key in root
+Create an .env file with the gemini key in root
 
 ```
-OPENAI_API_KEY=sk-proj-XXXXXXXXXXXXXX
+GEMINI_API_KEY=XXXXXXXXXXXXXX
 ```
 
 Rest of the work gets done by the notebook 😎
