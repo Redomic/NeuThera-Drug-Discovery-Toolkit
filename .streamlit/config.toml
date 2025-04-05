@@ -2,6 +2,7 @@
 headless = true
 port = 8501
 address = "0.0.0.0"
+serverName = "neuthera.redomic.in"
 enableCORS = false
 enableXsrfProtection = false
 
