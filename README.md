@@ -6,8 +6,6 @@ NeuThera is a modular drug discovery starter toolkit, integrating multiple state
 
 NeuThera supports both **end-to-end drug discovery automation** and **interactive, user-guided drug design workflows**.
 
-Some example generations (Protein PDB 5ool):
-
 ## Get Started
 
 **NOTE:** We have tried to make the installation simple, but due to the usage of multiple new technologies. They might not always work well together for different systems. It's recommended that you use Linux or MacOS for now. Hopefully, in the future we can update this repo to install everything without hurdles. If you get issues with libraries or wheel building, please try installing through conda forge.
