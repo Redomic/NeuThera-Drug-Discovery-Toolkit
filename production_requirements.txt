@@ -1,10 +1,11 @@
 python-dotenv
 numpy
-rdkit-pypi
+rdkit
 plotly
 streamlit
 pyvis
 arango
+python-arango
 langchain
 langchain-core
 langchain-community
