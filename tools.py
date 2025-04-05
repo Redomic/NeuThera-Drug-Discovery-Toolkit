@@ -663,21 +663,20 @@ def GenerateCompounds(pdb_id):
                 }
                 link_collection.insert(link_doc)
 
-        # valid_mols = []
-        # legends = []
+        valid_mols = []
+        legends = []
 
-        # for i, smiles in enumerate(generated_smiles):
-        #     mol = Chem.MolFromSmiles(smiles)
-        #     if mol:
-        #         valid_mols.append(mol)
-        #         legends.append(f"gen={i}")
-        #     else:
-        #         print(f"Invalid SMILES skipped: {smiles}")
+        for i, smiles in enumerate(generated_smiles):
+            mol = Chem.MolFromSmiles(smiles)
+            if mol:
+                valid_mols.append(mol)
+                legends.append(f"gen={i}")
+            else:
+                print(f"Invalid SMILES skipped: {smiles}")
 
-        # if valid_mols:
-        #     img = Draw.MolsToGridImage(valid_mols, molsPerRow=5, legends=legends)
-        #     st.write(img)
-
+        if valid_mols:
+            img = Draw.MolsToGridImage(valid_mols, molsPerRow=5, legends=legends)
+            st.write(img)
 
         with st.sidebar:
             st.markdown(f"**Action Output**")
