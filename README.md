@@ -16,7 +16,7 @@ Some example generations (Protein PDB 5ool):
 
 If everything still goes wrong, please feel free to message any of the contributors. Any and all contributions are also welcome to make the installation process better.
 
-### Setting up
+### Local Enviroment - Setting up
 
 Requirements:
 
