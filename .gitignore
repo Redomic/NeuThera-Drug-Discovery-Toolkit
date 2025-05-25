@@ -14,7 +14,7 @@ lib
 
 /gpt_model/checkpoint_best.pt
 /checkpoints
-/database/PDBlib/*
+/database/PDBlib/
 
 TamGen_Demo_Data/*.bin
 TamGen_Demo_Data/*.idx
