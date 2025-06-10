@@ -316,20 +316,27 @@ arango_graph.set_schema(sanitized_schema)
 
 def TextToAQL(query: str) -> str:
     """
-    BIOMEDICAL KNOWLEDGE GRAPH QUERY: Converts natural language questions into ArangoDB queries for comprehensive biomedical data retrieval.
+    BIOMEDICAL KNOWLEDGE GRAPH QUERY: Converts natural language questions into database queries for comprehensive biomedical data retrieval.
     
     This tool accesses a specialized knowledge graph containing:
     - Drug-protein interactions and binding data
-    - Gene-disease associations
+    - Gene-disease associations and pathways
     - Protein structural information
     - Drug mechanism pathways
     - Clinical trial and pharmacological data
     
-    Best for questions like:
+    Use this tool when you need to:
+    - Explore complex relationships in biomedical data
+    - Find connections that specific tools don't cover
+    - Query broad patterns or associations
+    - Access comprehensive database information
+    
+    Examples of suitable queries:
     - "What diseases are associated with gene X?"
     - "Which drugs target protein Y?"
-    - "Show me the interaction network for drug Z"
-    - "What are the side effects of compound A?"
+    - "Find drugs related to PDB Z"
+    - "Show me the interaction network for compound A"
+    - "What are the pathways involved in condition B?"
     
     Input: Natural language question about biomedical relationships
     Output: Structured answer from the knowledge graph
@@ -343,7 +350,7 @@ def TextToAQL(query: str) -> str:
     try:
         # Use Gemini 2.0 Flash for GraphRAG
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash-preview-05-20",
             temperature=0,
             google_api_key=google_api_key,
             max_retries=3

@@ -27,3 +27,5 @@ TamGen_Demo_Data/src/*
 !data/pdbaa.gz
 
 *.DS_Store
+
+/chat_history.db
