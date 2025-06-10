@@ -15,6 +15,86 @@ from langchain.callbacks.base import BaseCallbackHandler
 
 # ================= Application =================
 
+hide_streamlit_style = """
+    <style>
+    /* Hide Streamlit header, footer, and menu */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Hide "Deploy" button */
+    .stDeployButton {display: none;}
+    
+    /* Remove padding and margins for full embed */
+    .main .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        max-width: 100%;
+    }
+    
+    /* Remove sidebar completely for embedded view */
+    .css-1d391kg {display: none;}
+    
+    /* Adjust chat message styling for embedding */
+    [data-testid="stChatMessage"] {
+        margin-bottom: 0.5rem;
+    }
+    
+    /* User message styling */
+    [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarUser"]) > div:first-child {
+        background: linear-gradient(90deg, #F3BB4F 0%, #E8A935 100%) !important;
+        color: white !important;
+        border-radius: 12px;
+        padding: 12px 16px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(243, 187, 79, 0.2);
+    }
+
+    /* Assistant message styling */
+    [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarAssistant"]) > div:first-child {
+        background: linear-gradient(90deg, #16ADA9 0%, #128A87 100%) !important;
+        color: white !important;
+        border-radius: 12px;
+        padding: 12px 16px;
+        border: none;
+        box-shadow: 0 2px 8px rgba(22, 173, 169, 0.2);
+    }
+    
+    /* Style chat input */
+    .stChatInput > div {
+        border-radius: 25px;
+        border: 2px solid #16ADA9;
+    }
+    
+    .stChatInput input {
+        border-radius: 25px;
+    }
+    
+    /* Remove extra spacing */
+    .element-container {
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Responsive design for mobile embedding */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding: 0.5rem;
+        }
+        
+        [data-testid="stChatMessage"] > div:first-child {
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+    }
+
+    
+    </style>
+"""
+
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
@@ -136,6 +216,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+st.chat_message("assistant").markdown(
+    "👋 **Welcome to NeuThera!**\n\n"
+    "You're currently using the **MVP** version of the app, which only includes a limited set of drug discovery tools. (Mostly due to limited resources)\n\n"
+)
+
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -149,7 +235,7 @@ if user_input := st.chat_input("Type your drug-related query..."):
 
     st.sidebar.empty()
     st.sidebar.markdown(f"<div style='text-align: center;'><img src='data:image/png;base64,{img_base64}' width='175'></div>", unsafe_allow_html=True)
-    st.sidebar.markdown(f"<h1 style='text-align: center; color: #F3BB4F; font-size: 2rem;'>NeuThera</h1>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<h1 style='text-align: center; color: #F3BB4F; font-size: 2rem;'>Research Agent</h1>", unsafe_allow_html=True)
     st.sidebar.divider()
 
     with st.spinner("Thinking..."):

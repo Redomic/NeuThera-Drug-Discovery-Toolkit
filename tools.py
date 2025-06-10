@@ -1,5 +1,6 @@
 import os
 import sys
+import ast
 
 import requests
 import ast
@@ -270,38 +271,43 @@ arango_graph.set_schema(sanizited_schema)
 
 def TextToAQL(query: str):
     """Execute a Natural Language Query in ArangoDB, and return the result as text."""
-    
+
     llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
 
     class CallbackHandler(BaseCallbackHandler):
-        def on_agent_action(self, action, **kwargs):
-            thought = action.log.split('\n')[0].replace('Thought:', '').strip()
-            print(thought)
-            step = {
-                'type': 'GraphRAG Agent',
-                'content': f"🤔 **Thought:** {thought}",
-                # 'tool': action.tool,
-                # 'input': action.tool_input
-            }
-            
-            with st.sidebar:
-                st.markdown(f"**Thought**")
-                st.markdown(step['content'])
-                # st.markdown(f"🔧 **Action:** {step['tool']}")
-                # st.markdown(f"📤 **Input:** `{step['input']}`")
-                st.divider()
-        
-        def on_agent_finish(self, finish, **kwargs):
-            if finish.log:
-                final_answer = finish.log
-                step = {
-                    'type': 'answer',
-                    'content': f"✅ {final_answer}"
-                }
 
+        def _log(self, tag, **kwargs):
+            print(f"[Callback Triggered] {tag}")
+
+        def on_text(self, text, **kwargs):
+            self._log("on_text", text=text, **kwargs)
+
+            if isinstance(text, str):
+                if "AQL Query" in text:
+                    pass
+                elif "AQL Result" in text:
+                    pass
+                else:
+                    try:
+                        parsed = ast.literal_eval(text.strip())
+                        if isinstance(parsed, list) and all(isinstance(x, dict) for x in parsed):
+                            st.sidebar.markdown("### AQL Result")
+                            st.sidebar.json(parsed)
+                    except Exception:
+                        if "syntax error" in text.lower():
+                            st.sidebar.markdown("### ❌ Syntax Error")
+                            st.sidebar.error(text.strip())
+                        else:
+                            st.sidebar.markdown("### AQL Generated")
+                            st.sidebar.code(text.strip(), language="aql")
+
+        def on_chain_end(self, *args, **kwargs):
+            self._log("on_chain_end", **kwargs)
+            result = kwargs.get('outputs', {}).get('result')
+            if result:
                 with st.sidebar:
-                    st.markdown(f"**Final Answer**")
-                    st.success(step['content'])
+                    st.markdown("### ✅ Final Answer")
+                    st.success(result)
                     st.divider()
 
     chain = ArangoGraphQAChain.from_llm(
@@ -311,9 +317,8 @@ def TextToAQL(query: str):
         allow_dangerous_requests=True,
         callbacks=[CallbackHandler()]
     )
-    
-    result = chain.invoke(query)
 
+    result = chain.invoke(query)
     return str(result["result"])
 
 def PlotSmiles2D(smiles):
@@ -752,7 +757,7 @@ find_proteins_from_drug = Tool(
 text_to_aql = Tool(
     name="TextToAQL",
     func=TextToAQL,
-    description=TextToAQL.__doc__
+    description="Use this tool to answer natural language questions by querying a biomedical knowledge graph stored in ArangoDB. It leverages a specialized GraphRAG agent optimized for precise, factual retrieval from genes, drugs, diseases, and proteins. Prefer this when the question involves structured biological data, relationships, or anything ArangoDB might contain."
 )
 
 plot_smiles_2d = Tool(

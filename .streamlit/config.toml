@@ -7,3 +7,11 @@ enableXsrfProtection = false
 
 [global]
 environment = "production"
+
+[theme] 
+base="dark"
+primaryColor="#1d1d1d"
+secondaryColor="#323232"
+backgroundColor="#1d1d1d"
+SecondaryBackgroundColor="#323232"
+textColor="#B9B9B9"
