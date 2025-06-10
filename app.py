@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 
 from tools import tools
 
-from langchain_openai import ChatOpenAI
-from langchain.agents import create_react_agent, AgentExecutor
-from langchain_core.prompts.prompt import PromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.callbacks.base import BaseCallbackHandler
 
 
@@ -96,8 +96,13 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
-llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
+google_api_key = os.getenv("GOOGLE_API_KEY")
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash", 
+    google_api_key=google_api_key, 
+    temperature=0,
+    convert_system_message_to_human=True
+)
 
 def get_base64_image(image_path):
     with open(image_path, "rb") as img_file:
@@ -111,23 +116,39 @@ class CustomCallbackHandler(BaseCallbackHandler):
         self.reasoning_steps = []
 
     def on_agent_action(self, action, **kwargs):
-        thought = action.log.split('\n')[0].replace('Thought:', '').strip()
+        # For tool calling agents, the thought process is handled differently
+        # Extract meaningful reasoning from the action context
+        if hasattr(action, 'log') and action.log:
+            # Parse the reasoning from the log
+            thought_content = action.log.strip()
+        else:
+            # Create contextual thoughts based on the tool being used
+            if action.tool == "FindDrug":
+                thought_content = f"I need to search for detailed information about the drug: {action.tool_input}"
+            elif action.tool == "DrugInteractions":
+                thought_content = f"I should check for potential drug interactions with: {action.tool_input}"
+            elif action.tool == "MolecularInfo":
+                thought_content = f"Let me get molecular information for: {action.tool_input}"
+            elif action.tool == "PlotSmiles3D":
+                thought_content = f"I'll generate a 3D structure from the SMILES: {action.tool_input}"
+            else:
+                thought_content = f"I'll use the {action.tool} tool to help answer this question"
 
         if action.tool == "_Exception":
             raise ValueError("Agent attempted an invalid action: _Exception") 
         
         step = {
             'type': 'thought',
-            'content': f"🤔 **Thought:** {thought}",
+            'content': f"🤔 **Thought:** {thought_content}",
             'tool': action.tool,
             'input': action.tool_input
         }
         self.reasoning_steps.append(step)
         
         with st.sidebar:
-            st.markdown(f"**Step {len(self.reasoning_steps)} - Thought**")
+            st.markdown(f"**Step {len(self.reasoning_steps)} - Reasoning**")
             st.markdown(step['content'])
-            st.markdown(f"🔧 **Action:** {step['tool']}")
+            st.markdown(f"🔧 **Tool:** {step['tool']}")
             st.markdown(f"📤 **Input:** `{step['input']}`")
             st.divider()
     
@@ -145,33 +166,37 @@ class CustomCallbackHandler(BaseCallbackHandler):
 
 def agent_executor(user_query):
     try:
-        prompt = PromptTemplate.from_template(
-            """You are an AI assistant. Use the tools provided to answer questions.
+        # Use ChatPromptTemplate with MessagesPlaceholder for better tool calling support
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an AI assistant specialized in drug discovery and pharmaceutical research. You can ONLY use the tools that are explicitly provided to you.
             
-            Question: {input}
-            Tools Available: {tool_names}
-            Tools Descriptions: {tools}
-            Scratch pad (Previous Reasoning): {agent_scratchpad}
-
-            Wait for your tools to give results before using the next one. DO NOT RE-RUN TOOLS AFTER FAILURE
-
-            Think step by step before choosing an action.
-
-            If you have enough information to answer the question, respond in the following format:
+            CRITICAL RULES:
+            - You can ONLY use the tools listed in your available tools - no web search, no internet access, no external databases
+            - If you don't have a tool to get specific information, clearly state this limitation
+            - Do NOT pretend to search online or access external resources
+            - Base your responses only on the tool results you receive
+            - If a user asks for information you cannot obtain with available tools, explain what tools you would need
+            - Be honest about your limitations when tools are missing
             
-            Final Answer: [YOUR FINAL RESPONSE]
-
-            Otherwise, continue reasoning as follows:
-            
-            Thought: [YOUR THOUGHT]
-            Action: [SELECT ONE TOOL NAME]
-            Action Input: [INPUT REQUIRED BY TOOL]
-            """
-        )
-        agent = create_react_agent(llm=llm, tools=tools, prompt=prompt)
+            When you need to use a tool, explain your reasoning clearly and use the appropriate tool for the task."""),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad")
+        ])
+        
+        # Use create_tool_calling_agent instead of create_react_agent for better Gemini compatibility
+        agent = create_tool_calling_agent(llm, tools, prompt)
         callback_handler = CustomCallbackHandler()
 
-        agent_executor = AgentExecutor(agent=agent, tools=tools, callbacks=[callback_handler], handle_parsing_errors=True)
+        agent_executor = AgentExecutor(
+            agent=agent, 
+            tools=tools, 
+            callbacks=[callback_handler], 
+            handle_parsing_errors=True,
+            verbose=True,
+            max_iterations=8,
+            early_stopping_method="generate",
+            return_intermediate_steps=True
+        )
         
         if "reasoning_steps" in st.session_state:
             st.session_state.reasoning_steps = []
@@ -188,7 +213,7 @@ def agent_executor(user_query):
             return output_text
         
     except Exception as e:
-        print(e)
+        print(f"Agent execution error: {e}")
         error_msg = f"❌ Error: {str(e)}"
         st.sidebar.error(error_msg)
         return error_msg
@@ -245,5 +270,3 @@ if user_input := st.chat_input("Type your drug-related query..."):
         st.markdown(result)
 
     st.session_state.messages.append({"role": "assistant", "content": result})
-
-
