@@ -37,10 +37,30 @@ from langchain.callbacks.base import BaseCallbackHandler
 from pydantic import BaseModel, Field
 
 from Bio.PDB import MMCIFParser
-
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
+from Bio.PDB import PDBList, PDBParser, PPBuilder
+from Bio.PDB import PDBList, PDBParser, PPBuilder
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from rdkit import Chem, DataStructs
 from rdkit.Chem import MACCSkeys
 from rdkit.Chem import Draw, AllChem
+from rdkit.Chem import Descriptors, Crippen, rdMolDescriptors, QED
+
+import matplotlib.pyplot as plt   
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.Align import MultipleSeqAlignment
+from Bio.Phylo.TreeConstruction import DistanceCalculator, DistanceTreeConstructor
+from Bio.Align.Applications import MuscleCommandline
+   
+
+from Bio import AlignIO, Phylo, SeqIO
+from Bio.PDB import PDBList, PDBParser, PPBuilder
+from Bio.Align.Applications import MuscleCommandline
+from Bio.Phylo.TreeConstruction import DistanceCalculator, DistanceTreeConstructor
+from Bio.Align import MultipleSeqAlignment
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
 import plotly.graph_objects as go
 from rdkit import Chem
@@ -53,7 +73,7 @@ from pyvis.network import Network
 from DeepPurpose import utils
 from DeepPurpose import DTI as models
 
-from TamGen_custom import TamGenCustom
+from TamGen.TamGen_custom import TamGenCustom
 
 #================= Models & DB =================
 
@@ -1060,6 +1080,378 @@ def FindSimilarDrugs(smiles: str, top_k: int = 6) -> List[Dict[str, Union[str, f
         _display_sidebar_output("Search Error", error_msg, "error")
         return []
 
+def AnalyzeProtein(seq: str) -> Dict[str, Any]:
+    """
+    PROTEIN SEQUENCE ANALYSIS: Calculates fundamental physicochemical properties of a protein
+    from its amino acid sequence.
+
+    Use this tool for:
+    - Rapid property estimation (molecular weight, pI, hydrophobicity, etc.)
+    - Pre-screening protein sequences before structure modeling
+    - Generating feature vectors for ML pipelines
+
+    Features:
+    - Amino acid counts and percent composition
+    - Key physicochemical properties (MW, aromaticity, instability index, pI, GRAVY)
+
+    Input: Valid amino acid sequence (string, one-letter codes)
+    Output: Dictionary containing counts, percent composition and calculated properties
+
+    Args:
+        seq (str): Amino acid sequence (single-letter code)
+
+    Returns:
+        Dict[str, Any]: Dictionary with "counts", "percent" and "properties"
+    """
+    try:
+        print(f"Analyzing protein sequence of length {len(seq)}")
+        analysis = ProteinAnalysis(seq)
+
+        counts = analysis.count_amino_acids  # attribute
+        percent = {aa: round(val, 2) for aa, val in analysis.amino_acids_percent.items()}
+        props = {
+            "Molecular weight (Da)": round(analysis.molecular_weight(), 2),
+            "Aromaticity": round(analysis.aromaticity(), 2),
+            "Instability index": round(analysis.instability_index(), 2),
+            "Isoelectric point (pI)": round(analysis.isoelectric_point(), 2),
+            "GRAVY hydropathy": round(analysis.gravy(), 2)
+        }
+
+        result = {
+            "sequence_length": len(seq),
+            "counts": counts,
+            "percent": percent,
+            "properties": props
+        }
+
+        # Sidebar outputs for quick view
+        _display_sidebar_output("Protein Sequence Stats", f"Length: {len(seq)}", "success")
+        _display_sidebar_output("Amino Acid Counts", counts)
+        _display_sidebar_output("Percent Composition (%)", percent)
+        _display_sidebar_output("Calculated Properties", props)
+
+        return result
+
+    except Exception as e:
+        error_msg = f"Protein analysis failed: {str(e)}"
+        print(error_msg)
+        _display_sidebar_output("Analysis Error", error_msg, "error")
+        return {"error": error_msg}
+    
+def PredictADMETProperties(smiles: str) -> dict:
+    """
+    ADMET PROPERTY PREDICTION: Estimates key drug-likeness and developability properties.
+
+    Use this tool for:
+    - Early screening of compounds for drug-likeness
+    - Assessing absorption & solubility potential
+    - Getting QED & SAS scores for prioritization
+
+    Input:
+        smiles (str): SMILES string of the compound
+
+    Output:
+        dict: Predicted ADMET-related properties
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            _display_sidebar_output("Invalid Input", f"Invalid SMILES: {smiles}", "error")
+            return {}
+
+        # Core descriptors
+        mw = Descriptors.MolWt(mol)
+        logp = Crippen.MolLogP(mol)
+        tpsa = rdMolDescriptors.CalcTPSA(mol)
+        hbd = rdMolDescriptors.CalcNumHBD(mol)
+        hba = rdMolDescriptors.CalcNumHBA(mol)
+        rotb = rdMolDescriptors.CalcNumRotatableBonds(mol)
+        qed = QED.qed(mol)
+        # sas = sascorer.calculateScore(mol)  # optional if you have sascorer installed
+
+        # Lipinski rule violations
+        violations = 0
+        if mw > 500: violations += 1
+        if logp > 5: violations += 1
+        if hbd > 5: violations += 1
+        if hba > 10: violations += 1
+
+        result = {
+            "smiles": smiles,
+            "MolWt": round(mw, 2),
+            "LogP": round(logp, 2),
+            "TPSA": round(tpsa, 2),
+            "HBD": hbd,
+            "HBA": hba,
+            "RotatableBonds": rotb,
+            "LipinskiViolations": violations,
+            "QED": round(qed, 2),
+            # "SAS": round(sas, 2) if sas else None
+        }
+
+        _display_sidebar_output("ADMET Properties", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output("ADMET Error", f"Prediction failed: {str(e)}", "error")
+        return {}
+    
+
+
+def PredictDisorderRegionsinProteins(pdb_id, chain_id=None, threshold=0.5):
+    """
+    OFFLINE IDR PREDICTION: Uses Biopython flexibility scale as a proxy for disorder.
+
+    Input:
+        pdb_id (str): 4-char PDB ID (e.g., "1CRN")
+        chain_id (str|None): specific chain to analyze (None -> concat all chains)
+        threshold (float): flexibility score cutoff for calling a residue disordered (default 0.5)
+
+    Output:
+        dict with keys:
+          - log
+          - sequence
+          - per_residue
+          - disordered_regions
+    """
+    try:
+        pdb_id_clean = pdb_id.strip().lower()
+        _display_sidebar_output("IDR: Start", f"Fetching PDB {pdb_id_clean} ...", "success")
+
+        # Step 1: Download the PDB file
+        pdb_list = PDBList()
+        pdb_file = pdb_list.retrieve_pdb_file(pdb_id_clean, pdir='.', file_format='pdb')
+
+        # Step 2: Parse sequence(s) from PDB
+        parser = PDBParser(QUIET=True)
+        structure = parser.get_structure(pdb_id_clean, pdb_file)
+
+        ppb = PPBuilder()
+        seqs = []
+        for model in structure:
+            for chain in model:
+                if chain_id and chain.id != chain_id:
+                    continue
+                for pp in ppb.build_peptides(chain):
+                    seqs.append(str(pp.get_sequence()))
+
+        if not seqs:
+            msg = f"No protein sequence found for PDB {pdb_id_clean} (chain={chain_id})"
+            _display_sidebar_output("No Sequence", msg, "error")
+            return {
+                "log": msg,
+                "sequence": "",
+                "per_residue": [],
+                "disordered_regions": []
+            }
+
+        protein_sequence = "".join(seqs)
+        _display_sidebar_output("IDR: Sequence", f"Sequence length: {len(protein_sequence)}", "success")
+
+        # Step 3: Compute per-residue flexibility scores (proxy for disorder)
+        analysis = ProteinAnalysis(protein_sequence)
+        flex_scores = analysis.flexibility()
+
+        per_residue = []
+        for i, (aa, score) in enumerate(zip(protein_sequence, flex_scores), start=1):
+            per_residue.append({
+                "position": i,
+                "amino_acid": aa,
+                "score": score,
+                "is_disordered": score >= threshold
+            })
+
+        # Step 4: Identify disordered regions
+        disordered_regions = []
+        current_region = []
+        for entry in per_residue:
+            pos = entry["position"]
+            score = entry["score"]
+            if score >= threshold:
+                if not current_region:
+                    current_region = [pos]
+                elif pos == current_region[-1] + 1:
+                    current_region.append(pos)
+                else:
+                    if len(current_region) > 1:
+                        disordered_regions.append((current_region[0], current_region[-1]))
+                    current_region = [pos]
+            elif current_region and len(current_region) > 1:
+                disordered_regions.append((current_region[0], current_region[-1]))
+                current_region = []
+            elif current_region:
+                current_region = []
+        if current_region and len(current_region) > 1:
+            disordered_regions.append((current_region[0], current_region[-1]))
+
+        # Step 5: Research log
+        total_residues = len(per_residue)
+        disordered_count = sum(1 for e in per_residue if e["is_disordered"])
+        disordered_percentage = (disordered_count / total_residues) * 100 if total_residues > 0 else 0
+
+        log = f"""
+Offline Intrinsically Disordered Region (IDR) Prediction Research Log:
+=============================================================
+Analysis performed using Biopython flexibility scale (Vihinen et al.)
+PDB ID: {pdb_id.upper()}  |  Chain: {chain_id if chain_id else 'All'}
+Protein sequence length: {total_residues} amino acids
+Flexibility threshold: {threshold}
+
+Results Summary:
+- {disordered_count} residues ({disordered_percentage:.2f}%) predicted as 'high flexibility' (proxy for disorder)
+- {len(disordered_regions)} distinct 'disordered' regions identified
+
+Disordered Regions:
+"""
+        if disordered_regions:
+            for start, end in disordered_regions:
+                length = end - start + 1
+                log += f"- Region {start}-{end} (length: {length} residues)\n"
+        else:
+            log += "- No significant disordered regions found\n"
+
+        result = {
+            "log": log.strip(),
+            "sequence": protein_sequence,
+            "per_residue": per_residue,
+            "disordered_regions": disordered_regions
+        }
+
+        _display_sidebar_output("IDR Complete", {
+            "pdb": pdb_id.upper(),
+            "method": "flexibility-proxy",
+            "disordered_pct": round(disordered_percentage, 2)
+        })
+
+        return result
+
+    except Exception as e:
+        err = f"Offline IDR prediction failed: {str(e)}"
+        _display_sidebar_output("IDR Error", err, "error")
+        return {
+            "log": err,
+            "sequence": "",
+            "per_residue": [],
+            "disordered_regions": []
+        }
+
+def AnalyzeProteinConservation(pdb_id: str, chain_id: str = None) -> dict:
+    """
+    PROTEIN CONSERVATION ANALYSIS: Performs multiple sequence alignment and conservation scoring
+    directly from a PDB ID.
+
+    Use this tool to:
+    - Fetch a protein sequence from the PDB
+    - Align it with homologous sequences (if available)
+    - Compute per-residue conservation scores and consensus
+    - Identify highly conserved regions
+    - Visualize phylogenetic tree
+
+    Input:
+        pdb_id (str): PDB accession code (e.g., "1CRN")
+        chain_id (str, optional): Chain ID to restrict analysis to a specific chain (default: all chains)
+
+    Output:
+        dict:
+            {
+                "sequence": str,                       # primary sequence
+                "alignment": MultipleSeqAlignment,     # alignment object (in-memory)
+                "tree_fig": matplotlib.figure.Figure,  # plotted phylogenetic tree
+                "conservation_table": [                # per-position data
+                    {"position": int, "score": float, "consensus": str}, ...
+                ],
+                "conserved_positions": list[int]       # positions with >80% conservation
+            }
+    """
+   
+    try:
+        _display_sidebar_output("Step 1", f"Fetching PDB {pdb_id}…", "info")
+        pdbl = PDBList()
+        pdb_file = pdbl.retrieve_pdb_file(pdb_id, pdir=tempfile.gettempdir(), file_format='pdb')
+        parser = PDBParser(QUIET=True)
+        structure = parser.get_structure(pdb_id, pdb_file)
+
+        ppb = PPBuilder()
+        sequences = []
+        for model in structure:
+            for chain in model:
+                if chain_id and chain.id != chain_id:
+                    continue
+                seq = "".join([str(pp.get_sequence()) for pp in ppb.build_peptides(chain)])
+                if seq:
+                    sequences.append(SeqRecord(Seq(seq), id=f"{pdb_id}_{chain.id}"))
+
+        if not sequences:
+            _display_sidebar_output("Error", f"No sequences found for {pdb_id} (chain {chain_id})", "error")
+            return {}
+
+        # Step 2: Alignment (MUSCLE or padding fallback)
+        _display_sidebar_output("Step 2", "Running multiple sequence alignment…", "info")
+        try:
+            with tempfile.NamedTemporaryFile("w+", delete=False) as tmp_in, \
+                 tempfile.NamedTemporaryFile("w+", delete=False) as tmp_out:
+                SeqIO.write(sequences, tmp_in.name, "fasta")
+                input_file = tmp_in.name
+                aligned_file = tmp_out.name
+
+                muscle_cline = MuscleCommandline(input=input_file, out=aligned_file)
+                stdout, stderr = muscle_cline()
+                alignment = AlignIO.read(aligned_file, "fasta")
+                _display_sidebar_output("Alignment", f"Alignment length: {alignment.get_alignment_length()} positions", "success")
+        except Exception:
+            # fallback: simple padding
+            max_len = max(len(rec.seq) for rec in sequences)
+            padded = []
+            for rec in sequences:
+                seq = str(rec.seq).ljust(max_len, "-")
+                padded.append(SeqRecord(Seq(seq), id=rec.id))
+            alignment = MultipleSeqAlignment(padded)
+            _display_sidebar_output("Fallback", f"Simple padding alignment done (length {alignment.get_alignment_length()})", "warning")
+
+        # Step 3: Phylogenetic tree
+        calculator = DistanceCalculator("identity")
+        dm = calculator.get_distance(alignment)
+        constructor = DistanceTreeConstructor()
+        tree = constructor.nj(dm)
+
+        fig = plt.figure(figsize=(10, 6))
+        Phylo.draw(tree, do_show=False)
+        plt.tight_layout()
+        _display_sidebar_output("Tree", "Phylogenetic tree plotted successfully", "success")
+
+        # Step 4: Conservation analysis
+        conservation_table = []
+        conserved_positions = []
+        for i in range(alignment.get_alignment_length()):
+            column = alignment[:, i]
+            most_common = max(column, key=column.count)
+            score = column.count(most_common) / len(column)
+            conservation_table.append({
+                "position": i + 1,
+                "score": round(score, 2),
+                "consensus": most_common
+            })
+            if score > 0.8:
+                conserved_positions.append(i + 1)
+
+        _display_sidebar_output("Conservation", f"Identified {len(conserved_positions)} conserved positions (>80%)", "success")
+
+        # Return results
+        return {
+            "sequence": str(sequences[0].seq),
+            "alignment": alignment,
+            "tree_fig": fig,
+            "conservation_table": conservation_table,
+            "conserved_positions": conserved_positions
+        }
+
+    except Exception as e:
+        _display_sidebar_output("Error", f"Conservation analysis failed: {str(e)}", "error")
+        return {}
+
+
+
+
 # ================= Enhanced Tool Wrappers =================
 
 find_drug = Tool(
@@ -1128,6 +1520,28 @@ find_similar_drugs = Tool(
     description=FindSimilarDrugs.__doc__
 )
 
+analyse_proteins=Tool(
+    name="AnalyzeProteins",
+    func=AnalyzeProtein,
+    description=AnalyzeProtein.__doc__
+)
+predict_admet_properties=Tool(
+    name="PredictADMETProperties",
+    func=PredictADMETProperties,
+    description=PredictADMETProperties.__doc__
+)
+predict_protein_disorder_regions_from_pdb=Tool(
+    name="PredictDisorderRegionsinProteins",
+    func=PredictDisorderRegionsinProteins,
+    description=PredictDisorderRegionsinProteins.__doc__
+)
+
+protein_conservation_from_pdb=Tool(
+    name="AnalyzeProteinConservation",
+    func=AnalyzeProteinConservation,
+    description=AnalyzeProteinConservation.__doc__
+)
+
 # ================= Optimized Tool Collection =================
 
 tools = [
@@ -1141,5 +1555,10 @@ tools = [
     get_chemberta_embeddings,
     prepare_pdb_data,
     generate_compounds,
-    find_similar_drugs
+    find_similar_drugs,
+    analyse_proteins,
+    predict_admet_properties,
+    predict_protein_disorder_regions_from_pdb,
+    protein_conservation_from_pdb
+    
 ]

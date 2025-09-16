@@ -5,7 +5,9 @@ import re
 import regex
 import numpy as np
 
-# this is 4xli
+
+# This code reverses a SMILES representation so that it ends with the specified connection point for further expansion. It will be utilized to facilitate TamGen-based fragment design.
+
 template_smiles = r"Cc1nc(Nc2ncc(C(=O)[*])s2)cc(N2CCN(CCO)CC2)n1"
 special_element = 'Br'
 source_smiles = template_smiles.replace('*', special_element)

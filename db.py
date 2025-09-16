@@ -13,6 +13,9 @@ ARANGO_PASS = os.getenv("ARANGO_PASS")
 client = ArangoClient(hosts=ARANGO_HOST)
 db = client.db('NeuThera', username=ARANGO_USER, password=ARANGO_PASS)
 print("Connected to ArangoDB:", db.name)
+# print(os.getenv("ARANGO_HOST"))
+# print(os.getenv("ARANGO_USER"))
+# print(os.getenv("ARANGO_PASS"))
 
 arango_graph = ArangoGraph(db)
 
