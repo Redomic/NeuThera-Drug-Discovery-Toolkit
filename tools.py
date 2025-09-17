@@ -70,7 +70,7 @@ import streamlit as st
 import networkx as nx
 from pyvis.network import Network
 
-from DeepPurpose import utils
+from DeepPurpose import utils , DDI
 from DeepPurpose import DTI as models
 
 from TamGen.TamGen_custom import TamGenCustom
@@ -1449,6 +1449,117 @@ def AnalyzeProteinConservation(pdb_id: str, chain_id: str = None) -> dict:
         _display_sidebar_output("Error", f"Conservation analysis failed: {str(e)}", "error")
         return {}
 
+def PredictDrugDrugInteractions(inputs: dict, threshold: float = 0.5) -> dict:
+    """
+    OFFLINE DDI PREDICTION: Approximate, rule-based interaction risk between two drugs using only SMILES.
+    No ML models are used.
+
+    Input:
+        inputs (dict):
+            {
+              "smiles1": "CC(=O)Oc1ccccc1C(=O)O",
+              "smiles2": "NC(=O)C1=CN([C@@H]2OC@HC@@H[C@H]2O)C=CC1"
+            }
+        threshold (float): Tanimoto similarity cutoff (default=0.5)
+
+    Output:
+        dict:
+          - log (str): research log of how prediction was derived
+          - smiles1 (str): canonicalized SMILES for drug1
+          - smiles2 (str): canonicalized SMILES for drug2
+          - similarity_score (float): Tanimoto similarity (0–1)
+          - molecular_weight_diff (float): absolute MW difference
+          - interaction_flags (list[str]): heuristic reasons for possible interaction
+          - interaction_risk (str): "Low" | "Moderate" | "High"
+    """
+    try:
+        _display_sidebar_output("DDI: Start", "Computing similarity & heuristics…", "info")
+
+        smiles1 = inputs.get("smiles1")
+        smiles2 = inputs.get("smiles2")
+        if not smiles1 or not smiles2:
+            raise ValueError("inputs must contain 'smiles1' and 'smiles2'")
+
+        # Step 1: Parse SMILES
+        mol1 = Chem.MolFromSmiles(smiles1)
+        mol2 = Chem.MolFromSmiles(smiles2)
+        if mol1 is None or mol2 is None:
+            raise ValueError("Invalid SMILES input(s)")
+
+        smiles1 = Chem.MolToSmiles(mol1)  # canonicalized
+        smiles2 = Chem.MolToSmiles(mol2)
+
+        # Step 2: Fingerprint similarity
+        fp1 = AllChem.GetMorganFingerprintAsBitVect(mol1, radius=2, nBits=2048)
+        fp2 = AllChem.GetMorganFingerprintAsBitVect(mol2, radius=2, nBits=2048)
+        similarity_score = DataStructs.TanimotoSimilarity(fp1, fp2)
+
+        # Step 3: Basic descriptors
+        mw1 = Descriptors.MolWt(mol1)
+        mw2 = Descriptors.MolWt(mol2)
+        mw_diff = abs(mw1 - mw2)
+
+        # Step 4: Rule-based flags
+        interaction_flags = []
+        if similarity_score >= threshold:
+            interaction_flags.append("High chemical similarity (possible cross-reactivity)")
+        if mw_diff < 50:
+            interaction_flags.append("Similar molecular weight (possible PK overlap)")
+
+        # Step 5: Risk assignment
+        if len(interaction_flags) >= 2:
+            interaction_risk = "High"
+        elif interaction_flags:
+            interaction_risk = "Moderate"
+        else:
+            interaction_risk = "Low"
+
+        # Step 6: Research log
+        log = f"""
+Offline Drug-Drug Interaction (DDI) Approximation Research Log:
+=============================================================
+Method: Rule-based (SMILES fingerprints + descriptors, no ML/AI models)
+
+Inputs:
+- Drug A (SMILES): {smiles1}
+- Drug B (SMILES): {smiles2}
+
+Results Summary:
+- Tanimoto similarity: {similarity_score:.2f}
+- Molecular weight difference: {mw_diff:.2f} Da
+- Flags: {interaction_flags if interaction_flags else 'None'}
+- Overall risk level: {interaction_risk}
+"""
+
+        result = {
+            "log": log.strip(),
+            "smiles1": smiles1,
+            "smiles2": smiles2,
+            "similarity_score": round(similarity_score, 3),
+            "molecular_weight_diff": round(mw_diff, 2),
+            "interaction_flags": interaction_flags,
+            
+        }
+
+        _display_sidebar_output("DDI Complete", {
+            "risk": interaction_risk,
+            "similarity": round(similarity_score, 2)
+        }, "success")
+
+        return result
+
+    except Exception as e:
+        err = f"Offline DDI prediction failed: {str(e)}"
+        _display_sidebar_output("DDI Error", err, "error")
+        return {
+            "log": err,
+            "smiles1": "",
+            "smiles2": "",
+            "similarity_score": 0.0,
+            "molecular_weight_diff": 0.0,
+            "interaction_flags": [],
+           
+        }
 
 
 
@@ -1541,6 +1652,11 @@ protein_conservation_from_pdb=Tool(
     func=AnalyzeProteinConservation,
     description=AnalyzeProteinConservation.__doc__
 )
+predict_drug_drug_interactions=Tool(
+    name="PredictDrugDrugInteractions",
+    func=PredictDrugDrugInteractions,
+    description=PredictDrugDrugInteractions.__doc__
+)
 
 # ================= Optimized Tool Collection =================
 
@@ -1559,6 +1675,7 @@ tools = [
     analyse_proteins,
     predict_admet_properties,
     predict_protein_disorder_regions_from_pdb,
-    protein_conservation_from_pdb
+    protein_conservation_from_pdb,
+    predict_drug_drug_interactions
     
 ]
