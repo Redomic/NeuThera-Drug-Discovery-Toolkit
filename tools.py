@@ -36,6 +36,8 @@ from langchain.callbacks.base import BaseCallbackHandler
 
 from pydantic import BaseModel, Field
 
+from Bio.PDB import PDBList
+
 from Bio.PDB import MMCIFParser
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from Bio.PDB import PDBList, PDBParser, PPBuilder
@@ -1561,6 +1563,74 @@ Results Summary:
            
         }
 
+def PredictLigandBindingSites(pdb_id: str) -> dict:
+    """
+    LIGAND BINDING SITE IDENTIFICATION: Lists ligands already present in the crystal structure.
+
+    Use this tool for:
+    - Quickly retrieving bound ligands from a PDB structure
+    - Getting chain and residue IDs of HETATM entries
+    - Rapidly screening structures before docking
+
+    Input:
+        pdb_id (str): PDB accession code (e.g., "1CRN")
+
+    Output:
+        dict: {
+            "pdb_id": str,
+            "ligands_detected": int,
+            "ligands": [
+                {
+                    "resname": str,
+                    "chain": str,
+                    "resseq": int
+                }, ...
+            ]
+        }
+    """
+    try:
+        # ── Step 1: Fetch PDB structure ──────────────────────────────
+        _display_sidebar_output("Step 1", f"Fetching PDB {pdb_id}…", "info")
+        pdbl = PDBList()
+        pdb_file = pdbl.retrieve_pdb_file(
+            pdb_id,
+            pdir=tempfile.gettempdir(),
+            file_format='pdb'
+        )
+        pdb_file = os.path.abspath(pdb_file)
+
+        # ── Step 2: Parse PDB structure ──────────────────────────────
+        parser = PDBParser(QUIET=True)
+        structure = parser.get_structure(pdb_id, pdb_file)
+
+        # ── Step 3: Extract ligands (HETATM) ─────────────────────────
+        ligands = []
+        for model in structure:
+            for chain in model:
+                for residue in chain:
+                    hetfield, resseq, icode = residue.id
+                    if hetfield.strip():  # indicates a HETATM / ligand
+                        ligands.append({
+                            "resname": residue.resname,
+                            "chain": chain.id,
+                            "resseq": resseq
+                        })
+
+        # ── Step 4: Return result ────────────────────────────────────
+        result = {
+            "pdb_id": pdb_id,
+            "ligands_detected": len(ligands),
+            "ligands": ligands
+        }
+
+        _display_sidebar_output("Ligands", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output("Binding Site Error", f"Prediction failed: {str(e)}", "error")
+        return {}
+
+
 
 
 # ================= Enhanced Tool Wrappers =================
@@ -1657,6 +1727,11 @@ predict_drug_drug_interactions=Tool(
     func=PredictDrugDrugInteractions,
     description=PredictDrugDrugInteractions.__doc__
 )
+predict_binding_ligand_sites=Tool(
+    name="PredictLigandBindingSites",
+    func=PredictLigandBindingSites,
+    description=PredictLigandBindingSites.__doc__
+)
 
 # ================= Optimized Tool Collection =================
 
@@ -1676,6 +1751,6 @@ tools = [
     predict_admet_properties,
     predict_protein_disorder_regions_from_pdb,
     protein_conservation_from_pdb,
-    predict_drug_drug_interactions
-    
+    predict_drug_drug_interactions,
+    predict_binding_ligand_sites   
 ]
