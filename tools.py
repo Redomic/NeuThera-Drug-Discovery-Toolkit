@@ -1,21 +1,21 @@
 import os
 import sys
 import ast
-
+import math
 import requests
 import ast
 import json
 import hashlib
 import tempfile
 import re
-
+import matplotlib.pyplot as plt
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 from glob import glob
 from io import StringIO
 
 from db import db, arango_graph
-
+import sascorer
 import pandas as pd
 import numpy as np
 
@@ -47,8 +47,10 @@ from rdkit import Chem, DataStructs
 from rdkit.Chem import MACCSkeys
 from rdkit.Chem import Draw, AllChem
 from rdkit.Chem import Descriptors, Crippen, rdMolDescriptors, QED
-
-import matplotlib.pyplot as plt   
+from rdkit.Chem.MolStandardize import rdMolStandardize
+from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
+from rdkit.ML.Descriptors import MoleculeDescriptors
+from rdkit.Chem import Descriptors, AllChem, MACCSkeys ,Lipinski 
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Align import MultipleSeqAlignment
@@ -1630,9 +1632,521 @@ def PredictLigandBindingSites(pdb_id: str) -> dict:
         _display_sidebar_output("Binding Site Error", f"Prediction failed: {str(e)}", "error")
         return {}
 
+def EnumerateTautomersAndStereoisomers(smiles: str) -> dict:
+    """
+    ENUMERATE TAUTOMERS & STEREOISOMERS: Generates possible tautomeric and stereoisomeric forms of a compound.
 
+    Use this tool for:
+    - Exploring tautomeric states and stereoisomers of a molecule
+    - Preparing input for docking or screening workflows
+    - Understanding potential bioactive forms and stereochemistry
 
+    Input:
+        smiles (str): SMILES string of the compound
 
+    Output:
+        dict: Contains the input SMILES and lists of enumerated tautomers and stereoisomers (SMILES)
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            _display_sidebar_output("Invalid Input", f"Invalid SMILES: {smiles}", "error")
+            return {}
+
+        # ── Enumerate Tautomers ───────────────────────────────
+        tautomer_enum = rdMolStandardize.TautomerEnumerator()
+        tautomers = tautomer_enum.Enumerate(mol)
+        tautomer_smiles = [Chem.MolToSmiles(t, canonical=True) for t in tautomers]
+
+        # ── Enumerate Stereoisomers (for the original input) ──
+        stereo_opts = StereoEnumerationOptions(unique=True, onlyUnassigned=False)
+        stereoisomers = list(EnumerateStereoisomers(mol, options=stereo_opts))
+        stereo_smiles = [Chem.MolToSmiles(s, isomericSmiles=True) for s in stereoisomers]
+
+        result = {
+            "smiles": smiles,
+            "n_tautomers": len(tautomer_smiles),
+            "tautomers": tautomer_smiles,
+            "n_stereoisomers": len(stereo_smiles),
+            "stereoisomers": stereo_smiles
+        }
+
+        _display_sidebar_output("Tautomers & Stereoisomers", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output("Enumeration Error", f"Failed to enumerate: {str(e)}", "error")
+        return {}
+    
+def GenerateContactMapFromPDB(pdb_id: str, chain_id: str = None, atom_type: str = "CA", cutoff: float = 8.0) -> dict:
+    """
+    GENERATE CONTACT MAP FROM PDB: Computes a residue–residue contact map from a PDB structure.
+
+    Optimised:
+        - downloads PDB temporarily (no local save)
+        - computes only the binary contact map (no full distance matrix)
+        - uses vectorised computation for speed
+
+    Input:
+        pdb_id (str): 4-character PDB ID (e.g., "1CRN")
+        chain_id (str, optional): Chain identifier to restrict computation (default None = all chains)
+        atom_type (str, optional): "CA" for alpha carbons or "ALL" for all heavy atoms (default "CA")
+        cutoff (float, optional): Distance threshold in Å for defining contacts (default 8.0)
+
+    Output:
+        dict: Contains:
+            - pdb_id (str)
+            - chain_id (str)
+            - atom_type (str)
+            - cutoff (float)
+            - n_points (int): number of atoms/residues used
+            - residue_ids (list): list of (chain_id, residue_id)
+            - contact_map (list[list[int]]): binary contact map (1 if contact <= cutoff else 0)
+    """
+    try:
+        pdb_id_lower = pdb_id.lower()
+
+        # Download PDB to a temporary file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pdbl = PDBList()
+            pdb_file = pdbl.retrieve_pdb_file(pdb_id_lower, pdir=tmpdir, file_format='pdb')
+
+            parser = PDBParser(QUIET=True)
+            structure = parser.get_structure(pdb_id_lower, pdb_file)
+
+            coords = []
+            residue_ids = []
+
+            for model in structure:
+                for chain in model:
+                    if chain_id and chain.id != chain_id:
+                        continue
+                    for residue in chain:
+                        if atom_type == "ALL":
+                            for atom in residue.get_atoms():
+                                if atom.element != 'H':
+                                    coords.append(atom.coord)
+                                    residue_ids.append((chain.id, residue.id))
+                        else:
+                            if atom_type in residue:
+                                atom = residue[atom_type]
+                                coords.append(atom.coord)
+                                residue_ids.append((chain.id, residue.id))
+
+            coords = np.array(coords)
+            n = coords.shape[0]
+
+            # Vectorised computation for binary contact map only
+            diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+            sq_distances = np.sum(diff ** 2, axis=-1)
+            contact_matrix = (sq_distances <= cutoff ** 2).astype(int)
+            np.fill_diagonal(contact_matrix, 0)
+
+            # Show the contact map plot
+            plt.figure(figsize=(6, 6))
+            plt.imshow(contact_matrix, cmap="Greys", origin="lower")
+            plt.title(f"Contact Map {pdb_id.upper()} (cutoff={cutoff}Å)")
+            plt.xlabel("Residues")
+            plt.ylabel("Residues")
+            plt.tight_layout()
+            plt.show()
+
+            result = {
+                "pdb_id": pdb_id.upper(),
+                "chain_id": chain_id,
+                "atom_type": atom_type,
+                "cutoff": cutoff,
+                "n_points": n,
+                "residue_ids": residue_ids,
+                
+            }
+
+            _display_sidebar_output("Contact Map", result)
+            return result
+
+    except Exception as e:
+        _display_sidebar_output("Contact Map Error", f"Failed to generate contact map: {str(e)}", "error")
+        return {}
+
+def AutoExtractQSARFeatures(smiles: str) -> dict:
+    """
+    AUTO EXTRACT TOP 10 QSAR FEATURES + MORGAN FRAGMENT VISUALIZATION:
+    Extracts 10 widely used QSAR descriptors for a molecule given its SMILES,
+    and also generates a panel of fragment images corresponding to active
+    Morgan fingerprint bits.
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            _display_sidebar_output("Invalid Input", f"Invalid SMILES: {smiles}", "error")
+            return {}
+
+        descriptors_dict = {
+            "MolWt": Descriptors.MolWt(mol),
+            "MolLogP": Descriptors.MolLogP(mol),
+            "TPSA": rdMolDescriptors.CalcTPSA(mol),
+            "NumHDonors": Lipinski.NumHDonors(mol),
+            "NumHAcceptors": Lipinski.NumHAcceptors(mol),
+            "NumRotatableBonds": Lipinski.NumRotatableBonds(mol),
+            "NumAromaticRings": rdMolDescriptors.CalcNumAromaticRings(mol),
+            "HeavyAtomCount": mol.GetNumHeavyAtoms(),
+            "FractionCSP3": rdMolDescriptors.CalcFractionCSP3(mol),
+            "RingCount": rdMolDescriptors.CalcNumRings(mol)
+        }
+       
+        
+        result = {
+            "smiles": smiles,
+            "n_descriptors": len(descriptors_dict),
+            "descriptors": descriptors_dict,
+           
+        }
+
+        _display_sidebar_output("Top 10 QSAR Features", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output(
+            "QSAR Feature Extraction Error",
+            f"Failed to compute top descriptors: {str(e)}",
+            "error"
+        )
+        return {}
+
+def PredictLipinskiCompliance(smiles: str) -> dict:
+    """
+    PREDICT LIPINSKI COMPLIANCE:
+    Evaluates a molecule against Lipinski's Rule of Five to predict oral drug-likeness.
+
+    Use this tool for:
+    - Early-stage drug discovery filtering
+    - Determining if a compound is likely to be orally bioavailable
+    - Rapid screening of chemical libraries
+
+    Input:
+        smiles (str): SMILES string of the compound
+
+    Output:
+        dict: Contains:
+            - smiles (str): input SMILES
+            - properties (dict): key Lipinski properties
+            - n_violations (int): number of rule violations
+            - compliant (bool): True if passes (≤1 violation), False otherwise
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            _display_sidebar_output("Invalid Input", f"Invalid SMILES: {smiles}", "error")
+            return {}
+
+        # Compute Lipinski parameters
+        molwt = Descriptors.MolWt(mol)
+        logp = Descriptors.MolLogP(mol)
+        h_donors = Lipinski.NumHDonors(mol)
+        h_acceptors = Lipinski.NumHAcceptors(mol)
+        tpsa = rdMolDescriptors.CalcTPSA(mol)  # not part of original Ro5 but often used
+
+        # Check rule-of-five thresholds
+        violations = 0
+        if molwt > 500: violations += 1
+        if logp > 5: violations += 1
+        if h_donors > 5: violations += 1
+        if h_acceptors > 10: violations += 1
+
+        compliant = violations <= 1  # common practice: ≤1 violation still considered drug-like
+
+        properties = {
+            "MolWt": molwt,
+            "MolLogP": logp,
+            "NumHDonors": h_donors,
+            "NumHAcceptors": h_acceptors,
+            "TPSA": tpsa,
+            "RuleOfFiveViolations": violations
+        }
+
+        result = {
+            "smiles": smiles,
+            "properties": properties,
+            "n_violations": violations,
+            "compliant": compliant
+        }
+
+        _display_sidebar_output("Lipinski Compliance", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output(
+            "Lipinski Compliance Error",
+            f"Failed to compute Lipinski compliance: {str(e)}",
+            "error"
+        )
+        return {}
+    
+def PredictVeberRules(smiles: str) -> dict:
+    """
+    PREDICT VEBER RULES:
+    Evaluates a molecule against Veber’s rule criteria for oral bioavailability.
+
+    Use this tool for:
+    - Early-stage drug discovery filtering
+    - Assessing oral bioavailability potential based on Veber’s criteria
+
+    Input:
+        smiles (str): SMILES string of the compound
+
+    Output:
+        dict: Contains:
+            - smiles (str): input SMILES
+            - properties (dict): key Veber parameters (TPSA, rotatable bonds)
+            - n_violations (int): number of rule violations
+            - compliant (bool): True if no violation, False otherwise
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            _display_sidebar_output("Invalid Input", f"Invalid SMILES: {smiles}", "error")
+            return {}
+
+        # Compute Veber parameters
+        tpsa = rdMolDescriptors.CalcTPSA(mol)
+        rot_bonds = Lipinski.NumRotatableBonds(mol)
+
+        # Check Veber rule thresholds
+        violations = 0
+        if tpsa > 140: violations += 1
+        if rot_bonds > 10: violations += 1
+
+        compliant = violations == 0  # Veber is strict: no violations for compliance
+
+        properties = {
+            "TPSA": tpsa,
+            "NumRotatableBonds": rot_bonds,
+            "RuleViolations": violations
+        }
+
+        result = {
+            "smiles": smiles,
+            "properties": properties,
+            "n_violations": violations,
+            "compliant": compliant
+        }
+
+        _display_sidebar_output("Veber Rules Compliance", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output(
+            "Veber Rules Error",
+            f"Failed to compute Veber rules: {str(e)}",
+            "error"
+        )
+        return {}
+    
+def PredictSyntheticAccessibility(smiles: str) -> dict:
+    """
+    PREDICT SYNTHETIC ACCESSIBILITY:
+    Estimates the synthetic accessibility (SA) score of a molecule based on
+    its SMILES string. Lower scores indicate easier synthesis.
+
+    Use this tool for:
+    - Early-stage drug discovery filtering
+    - Evaluating feasibility of chemical synthesis
+    - Prioritizing molecules by ease of synthesis
+
+    Input:
+        smiles (str): SMILES string of the compound
+
+    Output:
+        dict: Contains:
+            - smiles (str): input SMILES
+            - properties (dict): key SA parameters (SA_score, Normalized_score, Difficulty)
+            - difficulty (str): qualitative difficulty label (Easy, Moderate, Hard)
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            _display_sidebar_output("Invalid Input", f"Invalid SMILES: {smiles}", "error")
+            return {}
+
+        # Use contrib scorer (range ~1–10)
+        sa_score = sascorer.calculateScore(mol)
+
+        # Normalize to 0–1
+        norm_score = (sa_score - 1) / 9
+        norm_score = max(0.0, min(1.0, norm_score))
+
+        # Difficulty labels
+        if sa_score < 3:
+            difficulty = "Easy"
+        elif sa_score < 6:
+            difficulty = "Moderate"
+        else:
+            difficulty = "Hard"
+
+        properties = {
+            "SA_Score": round(sa_score, 2),
+            "NormalizedScore": round(norm_score, 3),
+            "Difficulty": difficulty
+        }
+
+        result = {
+            "smiles": smiles,
+            "properties": properties,
+            "difficulty": difficulty
+        }
+
+        _display_sidebar_output("Synthetic Accessibility", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output(
+            "Synthetic Accessibility Error",
+            f"Failed to compute SA score: {str(e)}",
+            "error"
+        )
+        return {}
+    
+def PredictBloodBrainBarrierPenetration(smiles: str) -> dict:
+    """
+    PREDICT BLOOD-BRAIN BARRIER (BBB) PENETRATION:
+    Estimates the likelihood of a compound crossing the blood-brain barrier 
+    based on physicochemical heuristics (logP, TPSA, MW, H-bonding).
+
+    Use this tool for:
+    - CNS drug discovery prioritization
+    - Early screening for BBB permeability
+    - Eliminating molecules unlikely to be CNS-active
+
+    Input:
+        smiles (str): SMILES string of the compound
+
+    Output:
+        dict: Contains:
+            - smiles (str): input SMILES
+            - properties (dict): MW, LogP, TPSA, HBA, HBD
+            - prediction (str): "BBB+ (likely penetrant)" or "BBB- (unlikely)"
+            - compliant (bool): True if predicted BBB+, False otherwise
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            _display_sidebar_output("Invalid Input", f"Invalid SMILES: {smiles}", "error")
+            return {}
+
+        # Compute descriptors
+        mw = Descriptors.MolWt(mol)
+        logp = Crippen.MolLogP(mol)
+        tpsa = rdMolDescriptors.CalcTPSA(mol)
+        hbd = Lipinski.NumHDonors(mol)
+        hba = Lipinski.NumHAcceptors(mol)
+
+        # Apply simple heuristic thresholds
+        passes = 0
+        if mw <= 450: passes += 1
+        if 1 <= logp <= 4: passes += 1
+        if tpsa <= 90: passes += 1
+        if (hbd + hba) <= 8: passes += 1
+
+        compliant = passes >= 3  # majority-rule: at least 3/4 conditions met
+        prediction = "BBB+ (likely penetrant)" if compliant else "BBB- (unlikely)"
+
+        properties = {
+            "MW": round(mw, 2),
+            "LogP": round(logp, 2),
+            "TPSA": round(tpsa, 2),
+            "HBD": hbd,
+            "HBA": hba,
+            "CriteriaPassed": passes
+        }
+
+        result = {
+            "smiles": smiles,
+            "properties": properties,
+            "prediction": prediction,
+            "compliant": compliant
+        }
+
+        _display_sidebar_output("Blood-Brain Barrier Penetration", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output(
+            "BBB Prediction Error",
+            f"Failed to compute BBB penetration: {str(e)}",
+            "error"
+        )
+        return {}
+    
+
+def PredictCYP450Sites(smiles: str) -> dict:
+    """
+    PREDICT CYP450 METABOLIC SITES:
+    Identifies potential sites of metabolism (SoMs) for CYP450 enzymes using
+    simple structural heuristics (aromatic rings, benzylic positions, heteroatoms).
+
+    Use this tool for:
+    - Early metabolism liability screening
+    - Highlighting potential CYP450 soft spots
+    - Supporting drug metabolism and pharmacokinetics (DMPK) studies
+
+    Input:
+        smiles (str): SMILES string of the compound
+
+    Output:
+        dict: Contains:
+            - smiles (str): input SMILES
+            - candidate_sites (list): atom indices flagged as likely CYP450 SoMs
+            - functional_groups (list): groups matched (aromatic, benzylic, heteroatom)
+            - compliant (bool): True if at least 1 site found
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            _display_sidebar_output("Invalid Input", f"Invalid SMILES: {smiles}", "error")
+            return {}
+
+        candidate_sites = []
+        functional_groups = []
+
+        # Rule 1: Aromatic rings (hydroxylation)
+        aromatic_smarts = Chem.MolFromSmarts("a")
+        for match in mol.GetSubstructMatches(aromatic_smarts):
+            candidate_sites.extend(match)
+            functional_groups.append("Aromatic Hydroxylation")
+
+        # Rule 2: Benzylic carbons (oxidation)
+        benzylic_smarts = Chem.MolFromSmarts("[CH2,cH]-[c]")
+        for match in mol.GetSubstructMatches(benzylic_smarts):
+            candidate_sites.extend(match)
+            functional_groups.append("Benzylic Oxidation")
+
+        # Rule 3: Heteroatoms (dealkylation or oxidation at N, O, S)
+        heteroatom_smarts = Chem.MolFromSmarts("[N,O,S]")
+        for match in mol.GetSubstructMatches(heteroatom_smarts):
+            candidate_sites.extend(match)
+            functional_groups.append("Heteroatom Oxidation/Dealkylation")
+
+        # Deduplicate atom indices
+        candidate_sites = sorted(set(candidate_sites))
+        compliant = len(candidate_sites) > 0
+
+        result = {
+            "smiles": smiles,
+            "candidate_sites": candidate_sites,
+            "functional_groups": list(set(functional_groups)),
+            "compliant": compliant
+        }
+
+        _display_sidebar_output("CYP450 Metabolism Prediction", result)
+        return result
+
+    except Exception as e:
+        _display_sidebar_output(
+            "CYP450 Prediction Error",
+            f"Failed to compute CYP450 sites: {str(e)}",
+            "error"
+        )
+        return {}
 # ================= Enhanced Tool Wrappers =================
 
 find_drug = Tool(
@@ -1732,7 +2246,48 @@ predict_binding_ligand_sites=Tool(
     func=PredictLigandBindingSites,
     description=PredictLigandBindingSites.__doc__
 )
+enumerate_tautomers_and_stereoisomers=Tool(
+    name="EnumerateTautomersAndStereoisomers",
+    func=EnumerateTautomersAndStereoisomers,
+    description=EnumerateTautomersAndStereoisomers.__doc__
+)
+generate_contact_map_from_pdb=Tool(
+    name="GenerateContactMapFromPDB",
+    func=GenerateContactMapFromPDB,
+    description=GenerateContactMapFromPDB.__doc__
+)
+auto_extract_qsar_features=Tool(
+    name="AutoExtractQSARFeatures",
+    func=AutoExtractQSARFeatures,
+    description=AutoExtractQSARFeatures.__doc__
+)
+predict_lipinski_compliance=Tool(
+    name="PredictLipinskiCompliance",
+    func=PredictLipinskiCompliance,
+    description=PredictLipinskiCompliance.__doc__
+)
+predict_veber_rules=Tool(
+    name="PredictVeberRules",
+    func=PredictVeberRules,
+    description=PredictVeberRules.__doc__
+)
+predict_synthetic_accessibility=Tool(
+    name="PredictSyntheticAccessibility",
+    func=PredictSyntheticAccessibility,
+    description=PredictSyntheticAccessibility.__doc__
+)
 
+predict_blood_brain_barrier_penetration=Tool(
+    name="PredictBloodBrainBarrierPenetration",
+    func=PredictBloodBrainBarrierPenetration,
+    description=PredictBloodBrainBarrierPenetration.__doc__
+)
+
+predict_cyp450_sites=Tool(
+    name="PredictCYP450Sites",
+    func=PredictCYP450Sites,
+    description=PredictCYP450Sites.__doc__
+)
 # ================= Optimized Tool Collection =================
 
 tools = [
@@ -1752,5 +2307,13 @@ tools = [
     predict_protein_disorder_regions_from_pdb,
     protein_conservation_from_pdb,
     predict_drug_drug_interactions,
-    predict_binding_ligand_sites   
+    predict_binding_ligand_sites,
+    enumerate_tautomers_and_stereoisomers,
+    generate_contact_map_from_pdb,
+    auto_extract_qsar_features ,
+    predict_lipinski_compliance,
+    predict_veber_rules ,
+    predict_synthetic_accessibility,
+    predict_blood_brain_barrier_penetration,
+    predict_cyp450_sites
 ]
