@@ -25,7 +25,8 @@ from tools import (
     PreparePDBData, GenerateCompounds, FindSimilarDrugs,
     AnalyzeProtein, PredictADMETProperties,
     PredictDisorderRegionsinProteins, AnalyzeProteinConservation,
-    PredictDrugDrugInteractions, PredictLigandBindingSites
+    PredictDrugDrugInteractions, PredictLigandBindingSites, EnumerateTautomersAndStereoisomers, GenerateContactMapFromPDB , PredictCYP450Sites,
+    PredictBloodBrainBarrierPenetration,PredictVeberRules,AutoExtractQSARFeatures,PredictSyntheticAccessibility
 )
 
 load_dotenv()
@@ -102,7 +103,14 @@ class EnhancedToolRegistry:
             "PredictDisorderRegionsinProteins": PredictDisorderRegionsinProteins,
             "AnalyzeProteinConservation": AnalyzeProteinConservation,
             "PredictDrugDrugInteractions": PredictDrugDrugInteractions,
-            "PredictLigandBindingSites": PredictLigandBindingSites
+            "PredictLigandBindingSites": PredictLigandBindingSites,
+            "EnumerateTautomersAndStereoisomers": EnumerateTautomersAndStereoisomers,
+            "GenerateContactMapFromPDB": GenerateContactMapFromPDB,
+            "PredictCYP450Sites": PredictCYP450Sites,
+            "PredictBloodBrainBarrierPenetration": PredictBloodBrainBarrierPenetration,
+            "PredictVeberRules": PredictVeberRules,
+            "AutoExtractQSARFeatures": AutoExtractQSARFeatures,
+            "PredictSyntheticAccessibility": PredictSyntheticAccessibility
         }
     
     def _generate_descriptions(self) -> str:
@@ -125,7 +133,14 @@ class EnhancedToolRegistry:
             "PredictDisorderRegionsinProteins": "Identify disordered regions in protein structures",
             "AnalyzeProteinConservation": "Analyze evolutionary conservation patterns in proteins",
             "PredictDrugDrugInteractions": "Predict potential interactions between multiple drugs",
-            "PredictLigandBindingSites": "Identify potential binding sites for ligands on proteins"
+            "PredictLigandBindingSites": "Identify potential binding sites for ligands on proteins",
+            "EnumerateTautomersAndStereoisomers": "Generate all possible tautomers and stereoisomers for a given compound",
+            "GenerateContactMapFromPDB": "Create contact maps from protein structures in PDB files",
+            "PredictCYP450Sites": "Predict sites of metabolism by CYP450 enzymes on drug compounds",
+            "PredictBloodBrainBarrierPenetration": "Predict if a compound can penetrate the blood-brain barrier",
+            "PredictVeberRules": "Evaluate drug-likeness based on Veber's rules",
+            "AutoExtractQSARFeatures": "Automatically extract QSAR features from chemical structures",
+            "PredictSyntheticAccessibility": "Predict the synthetic accessibility of chemical compounds"
         }
         
         for name, func in self.tools.items():

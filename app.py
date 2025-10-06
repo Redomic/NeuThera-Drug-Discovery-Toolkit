@@ -18,7 +18,8 @@ from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 
 # Import the enhanced multi-agent system
-from multi_agent import EnhancedReWOOOrchestrator
+# from multi_agent import EnhancedReWOOOrchestrator
+from drug_orchestration import EnhancedReWOOOrchestrator
 
 # ================= Memory & History Management =================
 
@@ -285,85 +286,67 @@ def load_chat_history(session_id: str) -> ChatHistory:
 # ================= Enhanced Multi-Agent Executor =================
 
 def enhanced_multiagent_executor(user_query: str, conversation_memory: ConversationMemory):
-    """Execute enhanced multi-agent pipeline with proper memory integration."""
-    
-    # Get conversation history for context
+    """Execute the Enhanced ReWOO Orchestrator with full workflow and memory support."""
+
+    # Retrieve conversation history for context
     conversation_history = conversation_memory.get_context()
-    
-    # Update orchestrator with conversation history
+
+    # Initialize orchestrator (store in session for persistence)
     if 'orchestrator' not in st.session_state:
         st.session_state.orchestrator = EnhancedReWOOOrchestrator(
             conversation_history=conversation_history
         )
     else:
-        # Update existing orchestrator with new conversation history
         st.session_state.orchestrator.update_conversation_history(conversation_history)
-    
+
     orchestrator = st.session_state.orchestrator
-    
-    # Process the query
+
+    # Run the workflow-aware orchestrator
     exec_result = orchestrator.process_query(user_query)
 
-    # Display execution details in the sidebar
+    # --- Sidebar Summary ---
     with st.sidebar:
-        st.markdown("### 🎯 Enhanced Execution Plan")
-        
-        if exec_result.plan.steps:
-            for step in exec_result.plan.steps:
-                status_emoji = {
-                    "completed": "✅",
-                    "failed": "❌", 
-                    "pending": "⏳"
-                }.get(step.status, "❓")
-                
-                st.markdown(f"**{status_emoji} Step {step.step_id}**: {step.tool_name}")
-                st.markdown(f"📥 **Input**: `{step.tool_input}`")
-                
-                if step.dependencies:
-                    st.markdown(f"🔗 **Dependencies**: {step.dependencies}")
-                
-                if step.status == "failed" and step.error:
-                    st.error(f"Error: {step.error}")
-                
-                if step.execution_time:
-                    st.markdown(f"⏱️ **Time**: {step.execution_time:.2f}s")
-                
-                st.divider()
+        st.markdown("### 🧠 Workflow Summary")
+        st.markdown(f"**Workflow Type:** `{exec_result.plan.workflow_type.value}`")
+        st.markdown(f"**Execution Time:** {exec_result.execution_time:.2f}s")
+        st.markdown(f"**Total Steps:** {len(exec_result.plan.steps)}")
+        st.markdown(f"**Status:** {'✅ Success' if exec_result.success else '❌ Failed'}")
 
-        st.markdown("### 🛠️ Tool Outputs")
-        for step_id, output in exec_result.tool_outputs.items():
-            if output is not None:
-                # Find corresponding step
-                step_name = next((s.tool_name for s in exec_result.plan.steps if s.step_id == step_id), f"Step {step_id}")
-                
-                pretty_output = str(output)
-                if len(pretty_output) > 400:
-                    pretty_output = pretty_output[:400] + " …"
-                st.markdown(f"**{step_name}**: `{pretty_output}`")
-            else:
-                st.markdown(f"**Step {step_id}**: ❌ No output")
+        st.divider()
+
+        st.markdown("### ⚙️ Execution Steps")
+        for step in exec_result.plan.steps:
+            status_emoji = {
+                "completed": "✅",
+                "failed": "❌",
+                "pending": "⏳"
+            }.get(step.status, "❔")
+
+            st.markdown(f"**{status_emoji} {step.tool_name}** — {step.description}")
+            st.markdown(f"🧩 **Input:** `{step.tool_input}`")
+            if step.execution_time:
+                st.markdown(f"⏱️ **Time:** {step.execution_time:.2f}s")
+            if step.error:
+                st.error(f"Error: {step.error}")
             st.divider()
 
-        # Show execution summary
-        st.markdown("### 📊 Execution Summary")
-        st.markdown(f"**Success**: {'✅' if exec_result.success else '❌'}")
-        st.markdown(f"**Total Time**: {exec_result.execution_time:.2f}s")
-        st.markdown(f"**Tools Used**: {len(exec_result.plan.steps)}")
-        
-        if not exec_result.success and exec_result.error:
-            st.error(f"Error: {exec_result.error}")
+        if exec_result.workflow_report:
+            st.markdown("### 📊 Workflow Report Summary")
+            summary = exec_result.workflow_report.get("execution_summary", {})
+            st.write(summary)
 
-    # Save the interaction in memory with detailed tool information
+    # Save this interaction
     tool_calls_info = [
         {
             "step": step.step_id,
             "tool": step.tool_name,
             "status": step.status,
-            "execution_time": step.execution_time
+            "execution_time": step.execution_time,
+            "stage": step.stage.value if step.stage else "N/A"
         }
         for step in exec_result.plan.steps
     ]
-    
+
     conversation_memory.save_interaction(
         user_input=user_query,
         ai_response=exec_result.final_answer,
@@ -371,7 +354,11 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
         reasoning_step=" → ".join([s.tool_name for s in exec_result.plan.steps])
     )
 
+    # Return the orchestrator’s final synthesized response
     return exec_result.final_answer
+
+     
+
 
 
 # ================= Application Setup =================
