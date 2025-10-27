@@ -17,9 +17,8 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 
-# Import the enhanced multi-agent system
-# from multi_agent import EnhancedReWOOOrchestrator
-from drug_orchestration import EnhancedReWOOOrchestrator
+# Import the enhanced drug discovery orchestrator
+from drug_discovery_orchestrator import DrugDiscoveryOrchestrator
 
 # ================= Memory & History Management =================
 
@@ -286,14 +285,14 @@ def load_chat_history(session_id: str) -> ChatHistory:
 # ================= Enhanced Multi-Agent Executor =================
 
 def enhanced_multiagent_executor(user_query: str, conversation_memory: ConversationMemory):
-    """Execute the Enhanced ReWOO Orchestrator with full workflow and memory support."""
+    """Execute the Drug Discovery Orchestrator with full workflow and memory support."""
 
     # Retrieve conversation history for context
     conversation_history = conversation_memory.get_context()
 
     # Initialize orchestrator (store in session for persistence)
     if 'orchestrator' not in st.session_state:
-        st.session_state.orchestrator = EnhancedReWOOOrchestrator(
+        st.session_state.orchestrator = DrugDiscoveryOrchestrator(
             conversation_history=conversation_history
         )
     else:
@@ -307,7 +306,14 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
     # --- Sidebar Summary ---
     with st.sidebar:
         st.markdown("### 🧠 Workflow Summary")
-        st.markdown(f"**Workflow Type:** `{exec_result.plan.workflow_type.value}`")
+        
+        # Determine workflow type display
+        if exec_result.plan.is_drug_discovery_workflow:
+            workflow_type_display = "multi_stage_workflow"
+        else:
+            workflow_type_display = "simple"
+            
+        st.markdown(f"**Workflow Type:** `{workflow_type_display}`")
         st.markdown(f"**Execution Time:** {exec_result.execution_time:.2f}s")
         st.markdown(f"**Total Steps:** {len(exec_result.plan.steps)}")
         st.markdown(f"**Status:** {'✅ Success' if exec_result.success else '❌ Failed'}")
@@ -322,7 +328,10 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
                 "pending": "⏳"
             }.get(step.status, "❔")
 
-            st.markdown(f"**{status_emoji} {step.tool_name}** — {step.description}")
+            # Use workflow_stage instead of stage.value
+            stage_display = step.workflow_stage if step.workflow_stage else "N/A"
+            
+            st.markdown(f"**{status_emoji} {step.tool_name}** — Stage: {stage_display}")
             st.markdown(f"🧩 **Input:** `{step.tool_input}`")
             if step.execution_time:
                 st.markdown(f"⏱️ **Time:** {step.execution_time:.2f}s")
@@ -330,9 +339,10 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
                 st.error(f"Error: {step.error}")
             st.divider()
 
-        if exec_result.workflow_report:
+        # Use workflow_summary instead of workflow_report
+        if exec_result.workflow_summary:
             st.markdown("### 📊 Workflow Report Summary")
-            summary = exec_result.workflow_report.get("execution_summary", {})
+            summary = exec_result.workflow_summary
             st.write(summary)
 
     # Save this interaction
@@ -342,7 +352,7 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
             "tool": step.tool_name,
             "status": step.status,
             "execution_time": step.execution_time,
-            "stage": step.stage.value if step.stage else "N/A"
+            "stage": step.workflow_stage if step.workflow_stage else "N/A"
         }
         for step in exec_result.plan.steps
     ]
@@ -354,7 +364,7 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
         reasoning_step=" → ".join([s.tool_name for s in exec_result.plan.steps])
     )
 
-    # Return the orchestrator’s final synthesized response
+    # Return the orchestrator's final synthesized response
     return exec_result.final_answer
 
      
