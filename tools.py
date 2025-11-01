@@ -27,12 +27,12 @@ import torch
 
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
-from langchain.llms.bedrock import Bedrock
+# from langchain.llms.bedrock import Bedrock
 from langchain_community.graphs import ArangoGraph
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chains.graph_qa.arangodb import ArangoGraphQAChain
-from langchain.tools import Tool
-from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.tools import Tool
+from langchain_core.callbacks import BaseCallbackHandler
 
 from pydantic import BaseModel, Field
 
@@ -55,12 +55,11 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Align import MultipleSeqAlignment
 from Bio.Phylo.TreeConstruction import DistanceCalculator, DistanceTreeConstructor
-from Bio.Align.Applications import MuscleCommandline
+# from Bio.Align.Applications import MuscleCommandline
    
 
 from Bio import AlignIO, Phylo, SeqIO
 from Bio.PDB import PDBList, PDBParser, PPBuilder
-from Bio.Align.Applications import MuscleCommandline
 from Bio.Phylo.TreeConstruction import DistanceCalculator, DistanceTreeConstructor
 from Bio.Align import MultipleSeqAlignment
 from Bio.Seq import Seq

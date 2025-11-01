@@ -9,16 +9,15 @@ from typing import List, Dict, Any, Optional
 import hashlib
 
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 
 # Import the enhanced drug discovery orchestrator
-from drug_discovery_orchestrator import DrugDiscoveryOrchestrator
+from drug_orchestration import DrugDiscoveryOrchestrator
 
 # ================= Memory & History Management =================
 

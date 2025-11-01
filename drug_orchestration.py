@@ -8,12 +8,13 @@ from collections import defaultdict
 import hashlib
 
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import BaseMessage, HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+
 from dotenv import load_dotenv
 
 # Import your existing tools
-from tools import (
+from tools import ( 
     FindDrug, FindProteinsFromDrug, TextToAQL, 
     PlotSmiles2D, PlotSmiles3D, PredictBindingAffinity,
     GetAminoAcidSequence, GetChemBERTaEmbeddings,

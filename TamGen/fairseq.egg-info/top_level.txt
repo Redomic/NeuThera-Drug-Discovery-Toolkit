@@ -1,3 +1,0 @@
-fairseq
-fairseq_cli
-tests
