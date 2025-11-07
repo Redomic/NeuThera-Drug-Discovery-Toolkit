@@ -467,15 +467,16 @@ with col2:
 
 # Welcome message
 st.chat_message("assistant").markdown(
-    "👋 **Welcome to NeuThera Enhanced!**\n\n"
-    "You're now using the **Enhanced Multi-Agent** version with improved reasoning, better error handling, and context-aware planning.\n\n"
-    "✨ **New Features:**\n"
-    "- Context-aware tool selection based on conversation history\n"
-    "- Robust error handling and fallback strategies\n"
-    "- Enhanced result synthesis\n"
-    "- Better AQL query generation\n\n"
-    "Ask me anything about drug discovery, molecular analysis, or pharmaceutical research!"
+    "### 💊 **Welcome to NeuThera Enhanced!**\n\n"
+    "Experience the new **Enhanced Multi-Agent System** — built for smarter reasoning, faster responses, and seamless context awareness.\n\n"
+    "✨ **What’s New:**\n"
+    "- 🧠 **Adaptive tool selection** that understands your workflow\n"
+    "- ⚙️ **Stronger error recovery** and fallback strategies\n"
+    "- 🔍 **Sharper result synthesis** for clearer insights\n"
+    "- 🧬 **Smarter AQL query generation** for faster data analysis\n\n"
+    "Start exploring **drug discovery**, **molecular research**, and **pharmaceutical insights** — now with more intelligence and precision than ever!"
 )
+
 
 # Initialize messages
 if "messages" not in st.session_state:
