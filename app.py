@@ -304,23 +304,26 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
 
     # --- Sidebar Summary ---
     with st.sidebar:
-        st.markdown("### 🧠 Workflow Summary")
+        st.markdown("### 🧬 Workflow Analysis")
         
         # Determine workflow type display
         if exec_result.plan.is_drug_discovery_workflow:
-            workflow_type_display = "multi_stage_workflow"
+            workflow_type_display = "Multi-Stage Discovery"
         else:
-            workflow_type_display = "simple"
+            workflow_type_display = "Direct Query"
             
-        st.markdown(f"**Workflow Type:** `{workflow_type_display}`")
-        st.markdown(f"**Execution Time:** {exec_result.execution_time:.2f}s")
-        st.markdown(f"**Total Steps:** {len(exec_result.plan.steps)}")
-        st.markdown(f"**Status:** {'✅ Success' if exec_result.success else '❌ Failed'}")
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 15px; border-radius: 10px; margin-bottom: 15px;'>
+            <p style='color: white; margin: 0; font-size: 0.9em;'><strong>Workflow Type:</strong> {workflow_type_display}</p>
+            <p style='color: white; margin: 5px 0 0 0; font-size: 0.9em;'><strong>Execution Time:</strong> {exec_result.execution_time:.2f}s</p>
+            <p style='color: white; margin: 5px 0 0 0; font-size: 0.9em;'><strong>Total Steps:</strong> {len(exec_result.plan.steps)}</p>
+            <p style='color: white; margin: 5px 0 0 0; font-size: 0.9em;'><strong>Status:</strong> {'✅ Success' if exec_result.success else '❌ Failed'}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.divider()
-
-        st.markdown("### ⚙️ Execution Steps")
-        for step in exec_result.plan.steps:
+        st.markdown("### ⚙️ Execution Pipeline")
+        for i, step in enumerate(exec_result.plan.steps, 1):
             status_emoji = {
                 "completed": "✅",
                 "failed": "❌",
@@ -330,19 +333,25 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
             # Use workflow_stage instead of stage.value
             stage_display = step.workflow_stage if step.workflow_stage else "N/A"
             
-            st.markdown(f"**{status_emoji} {step.tool_name}** — Stage: {stage_display}")
-            st.markdown(f"🧩 **Input:** `{step.tool_input}`")
-            if step.execution_time:
-                st.markdown(f"⏱️ **Time:** {step.execution_time:.2f}s")
-            if step.error:
-                st.error(f"Error: {step.error}")
-            st.divider()
+            st.markdown(f"""
+            <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                        padding: 12px; border-radius: 8px; margin-bottom: 10px;'>
+                <p style='color: white; margin: 0; font-weight: bold;'>{status_emoji} Step {i}: {step.tool_name}</p>
+                <p style='color: rgba(255,255,255,0.9); margin: 5px 0 0 0; font-size: 0.85em;'>Stage: {stage_display}</p>
+                <p style='color: rgba(255,255,255,0.8); margin: 5px 0 0 0; font-size: 0.8em;'>Input: {step.tool_input[:50]}...</p>
+                {f"<p style='color: rgba(255,255,255,0.8); margin: 5px 0 0 0; font-size: 0.8em;'>⏱️ {step.execution_time:.2f}s</p>" if step.execution_time else ""}
+            </div>
+            """, unsafe_allow_html=True)
 
         # Use workflow_summary instead of workflow_report
         if exec_result.workflow_summary:
-            st.markdown("### 📊 Workflow Report Summary")
-            summary = exec_result.workflow_summary
-            st.write(summary)
+            st.markdown("### 📊 Workflow Summary")
+            st.markdown(f"""
+            <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                        padding: 15px; border-radius: 10px;'>
+                <p style='color: white; margin: 0; font-size: 0.9em;'>{exec_result.workflow_summary}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
     # Save this interaction
     tool_calls_info = [
@@ -374,63 +383,175 @@ def enhanced_multiagent_executor(user_query: str, conversation_memory: Conversat
 
 hide_streamlit_style = """
     <style>
-    /* Hide Streamlit header, footer, and menu */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
-    
-    /* Hide "Deploy" button */
     .stDeployButton {display: none;}
     
-    /* Remove padding and margins for full embed */
+    /* Global styling */
+    * {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Main container with gradient background */
+    .main {
+        background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+    }
+    
     .main .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
         max-width: 100%;
     }
     
-    /* User message styling */
-    [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarUser"]) > div:first-child {
-        background: linear-gradient(90deg, #F3BB4F 0%, #E8A935 100%) !important;
-        color: white !important;
-        border-radius: 12px;
-        padding: 12px 16px;
-        border: none;
-        box-shadow: 0 2px 8px rgba(243, 187, 79, 0.2);
-    }
-
-    /* Assistant message styling */
-    [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarAssistant"]) > div:first-child {
-        background: linear-gradient(90deg, #16ADA9 0%, #128A87 100%) !important;
-        color: white !important;
-        border-radius: 12px;
-        padding: 12px 16px;
-        border: none;
-        box-shadow: 0 2px 8px rgba(22, 173, 169, 0.2);
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1e1e2f 0%, #2d2d44 100%);
     }
     
-    /* Style chat input */
+    [data-testid="stSidebar"] > div:first-child {
+        background: transparent;
+    }
+    
+    /* User message with gradient */
+    [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarUser"]) > div:first-child {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        border-radius: 18px;
+        padding: 16px 20px;
+        border: none;
+        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+        backdrop-filter: blur(10px);
+    }
+
+    /* Assistant message with gradient */
+    [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarAssistant"]) > div:first-child {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
+        color: white !important;
+        border-radius: 18px;
+        padding: 16px 20px;
+        border: none;
+        box-shadow: 0 8px 24px rgba(240, 147, 251, 0.3);
+        backdrop-filter: blur(10px);
+    }
+    
+    /* Avatar styling */
+    [data-testid="stChatMessageAvatarUser"], 
+    [data-testid="stChatMessageAvatarAssistant"] {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+    }
+    
+    /* Style chat input with glowing effect */
     .stChatInput > div {
-        border-radius: 25px;
-        border: 2px solid #16ADA9;
+        border-radius: 30px;
+        border: 2px solid transparent;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-clip: padding-box;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
     }
     
     .stChatInput input {
-        border-radius: 25px;
+        border-radius: 30px;
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
+        backdrop-filter: blur(10px);
     }
     
-    /* Responsive design for mobile embedding */
+    .stChatInput input::placeholder {
+        color: rgba(255, 255, 255, 0.6);
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 10px 24px;
+        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }
+    
+    /* Welcome card styling */
+    .welcome-card {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        border: 2px solid rgba(102, 126, 234, 0.3);
+        border-radius: 20px;
+        padding: 30px;
+        margin: 20px 0;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.2);
+    }
+    
+    /* Feature badges */
+    .feature-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        margin: 5px;
+        font-size: 0.9em;
+        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+    }
+    
+    /* Responsive design */
     @media (max-width: 768px) {
         .main .block-container {
-            padding: 0.5rem;
+            padding: 1rem;
         }
         
         [data-testid="stChatMessage"] > div:first-child {
-            padding: 8px 12px;
+            padding: 12px 16px;
             font-size: 14px;
         }
+    }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    }
+    
+    /* Text color for better visibility */
+    h1, h2, h3, h4, h5, h6, p, li, span, div {
+        color: rgba(255, 255, 255, 0.9);
+    }
+    
+    /* Markdown content in messages */
+    [data-testid="stChatMessage"] p,
+    [data-testid="stChatMessage"] li,
+    [data-testid="stChatMessage"] span {
+        color: white !important;
     }
     </style>
 """
@@ -458,24 +579,40 @@ conversation_memory = ConversationMemory(session_id)
 # Add clear memory button to top right
 col1, col2 = st.columns([6, 1])
 with col2:
-    if st.button("Clear Memory", type="secondary", help="Clear conversation history"):
+    if st.button("🗑️ Clear", type="secondary", help="Clear conversation history"):
         conversation_memory.chat_history.clear()
         st.session_state.messages = []
         if 'orchestrator' in st.session_state:
             del st.session_state.orchestrator
         st.rerun()
 
-# Welcome message
-st.chat_message("assistant").markdown(
-    "### 💊 **Welcome to NeuThera Enhanced!**\n\n"
-    "Experience the new **Enhanced Multi-Agent System** — built for smarter reasoning, faster responses, and seamless context awareness.\n\n"
-    "✨ **What’s New:**\n"
-    "- 🧠 **Adaptive tool selection** that understands your workflow\n"
-    "- ⚙️ **Stronger error recovery** and fallback strategies\n"
-    "- 🔍 **Sharper result synthesis** for clearer insights\n"
-    "- 🧬 **Smarter AQL query generation** for faster data analysis\n\n"
-    "Start exploring **drug discovery**, **molecular research**, and **pharmaceutical insights** — now with more intelligence and precision than ever!"
-)
+# Enhanced welcome message using chat message
+with st.chat_message("assistant"):
+    st.markdown("### 💊 **Welcome to NeuThera Enhanced!**")
+    st.markdown("**Next-Generation Multi-Agent Drug Discovery Platform**")
+    st.markdown("")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown("🧠 **Adaptive AI**")
+    with col2:
+        st.markdown("⚡ **Lightning Fast**")
+    with col3:
+        st.markdown("🔬 **Research-Grade**")
+    with col4:
+        st.markdown("🎯 **High Precision**")
+    
+    st.markdown("")
+    st.markdown("#### ✨ Advanced Capabilities:")
+    st.markdown("""
+    - **🧬 Intelligent Workflow Detection:** Automatically identifies multi-stage drug discovery processes
+    - **⚙️ Smart Error Recovery:** Advanced fallback strategies ensure continuous operation
+    - **🔍 Enhanced Result Synthesis:** Clear, actionable insights from complex data
+    - **💡 Optimized AQL Queries:** Faster database analysis with intelligent query generation
+    """)
+    
+    st.markdown("")
+    st.markdown("*Powered by advanced multi-agent orchestration | Real-time molecular analysis | Pharmaceutical intelligence*")
 
 
 # Initialize messages
@@ -494,7 +631,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Chat input
-if user_input := st.chat_input("Type your drug-related query..."):
+if user_input := st.chat_input("🔬 Ask about drug discovery, molecular research, or pharmaceutical insights..."):
     # Display user message
     st.chat_message("user").markdown(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
@@ -502,16 +639,27 @@ if user_input := st.chat_input("Type your drug-related query..."):
     # Setup sidebar
     st.sidebar.empty()
     if img_base64:
-        st.sidebar.markdown(f"<div style='text-align: center;'><img src='data:image/png;base64,{img_base64}' width='175'></div>", unsafe_allow_html=True)
-    st.sidebar.markdown(f"<h1 style='text-align: center; color: #F3BB4F; font-size: 2rem;'>Enhanced Research Agent</h1>", unsafe_allow_html=True)
+        st.sidebar.markdown(f"""
+        <div style='text-align: center; margin-bottom: 20px;'>
+            <img src='data:image/png;base64,{img_base64}' width='150' style='border-radius: 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);'>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.sidebar.markdown(f"""
+    <h1 style='text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+               -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+               font-size: 1.8rem; margin-bottom: 20px;'>
+        Research Agent
+    </h1>
+    """, unsafe_allow_html=True)
     st.sidebar.divider()
 
     # Process query with enhanced multi-agent system
-    with st.spinner("🧠 Processing with enhanced multi-agent system..."):
+    with st.spinner("🧬 Analyzing query with multi-agent orchestration..."):
         try:
             result = enhanced_multiagent_executor(user_input, conversation_memory)
         except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
+            st.error(f"⚠️ An error occurred: {str(e)}")
             result = f"I apologize, but I encountered an error: {str(e)}. Please try rephrasing your question or contact support if the issue persists."
     
     # Display assistant response
