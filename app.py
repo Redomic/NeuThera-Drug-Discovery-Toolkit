@@ -8,17 +8,16 @@ import sqlite3
 from typing import List, Dict, Any, Optional
 import hashlib
 
-from tools import tools
-
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 
+# Import the enhanced drug discovery orchestrator
+from drug_orchestration import DrugDiscoveryOrchestrator
 
 # ================= Memory & History Management =================
 
@@ -241,7 +240,7 @@ class ConversationMemory:
         
         for msg in recent_messages:
             if isinstance(msg, HumanMessage):
-                # Simple keyword extraction - in production, use NLP libraries
+                # Simple keyword extraction
                 words = msg.content.lower().split()
                 important_words = [w for w in words if len(w) > 4 and w.isalpha()]
                 if important_words:
@@ -282,237 +281,277 @@ def load_chat_history(session_id: str) -> ChatHistory:
     return ChatHistory(session_id)
 
 
-# ================= Callback Handler with Memory =================
+# ================= Enhanced Multi-Agent Executor =================
 
-class CustomCallbackHandler(BaseCallbackHandler):
-    def __init__(self, conversation_memory: ConversationMemory):
-        super().__init__()
-        self.reasoning_steps = []
-        self.conversation_memory = conversation_memory
-        self.tool_calls = []
+def enhanced_multiagent_executor(user_query: str, conversation_memory: ConversationMemory):
+    """Execute the Drug Discovery Orchestrator with full workflow and memory support."""
 
-    def on_agent_action(self, action, **kwargs):
-        # Extract meaningful reasoning from the action context
-        if hasattr(action, 'log') and action.log:
-            thought_content = action.log.strip()
+    # Retrieve conversation history for context
+    conversation_history = conversation_memory.get_context()
+
+    # Initialize orchestrator (store in session for persistence)
+    if 'orchestrator' not in st.session_state:
+        st.session_state.orchestrator = DrugDiscoveryOrchestrator(
+            conversation_history=conversation_history
+        )
+    else:
+        st.session_state.orchestrator.update_conversation_history(conversation_history)
+
+    orchestrator = st.session_state.orchestrator
+
+    # Run the workflow-aware orchestrator
+    exec_result = orchestrator.process_query(user_query)
+
+    # --- Sidebar Summary ---
+    with st.sidebar:
+        st.markdown("### 🧬 Workflow Analysis")
+        
+        # Determine workflow type display
+        if exec_result.plan.is_drug_discovery_workflow:
+            workflow_type_display = "Multi-Stage Discovery"
         else:
-            # Create contextual thoughts based on the tool being used
-            if action.tool == "FindDrug":
-                thought_content = f"I need to search for detailed information about the drug: {action.tool_input}"
-            elif action.tool == "DrugInteractions":
-                thought_content = f"I should check for potential drug interactions with: {action.tool_input}"
-            elif action.tool == "MolecularInfo":
-                thought_content = f"Let me get molecular information for: {action.tool_input}"
-            elif action.tool == "PlotSmiles3D":
-                thought_content = f"I'll generate a 3D structure from the SMILES: {action.tool_input}"
-            else:
-                thought_content = f"I'll use the {action.tool} tool to help answer this question"
+            workflow_type_display = "Direct Query"
+            
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 15px; border-radius: 10px; margin-bottom: 15px;'>
+            <p style='color: white; margin: 0; font-size: 0.9em;'><strong>Workflow Type:</strong> {workflow_type_display}</p>
+            <p style='color: white; margin: 5px 0 0 0; font-size: 0.9em;'><strong>Execution Time:</strong> {exec_result.execution_time:.2f}s</p>
+            <p style='color: white; margin: 5px 0 0 0; font-size: 0.9em;'><strong>Total Steps:</strong> {len(exec_result.plan.steps)}</p>
+            <p style='color: white; margin: 5px 0 0 0; font-size: 0.9em;'><strong>Status:</strong> {'✅ Success' if exec_result.success else '❌ Failed'}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        if action.tool == "_Exception":
-            raise ValueError("Agent attempted an invalid action: _Exception") 
-        
-        step = {
-            'type': 'thought',
-            'content': f"🤔 **Thought:** {thought_content}",
-            'tool': action.tool,
-            'input': action.tool_input,
-            'timestamp': datetime.now().isoformat()
+        st.markdown("### ⚙️ Execution Pipeline")
+        for i, step in enumerate(exec_result.plan.steps, 1):
+            status_emoji = {
+                "completed": "✅",
+                "failed": "❌",
+                "pending": "⏳"
+            }.get(step.status, "❔")
+
+            # Use workflow_stage instead of stage.value
+            stage_display = step.workflow_stage if step.workflow_stage else "N/A"
+            
+            st.markdown(f"""
+            <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                        padding: 12px; border-radius: 8px; margin-bottom: 10px;'>
+                <p style='color: white; margin: 0; font-weight: bold;'>{status_emoji} Step {i}: {step.tool_name}</p>
+                <p style='color: rgba(255,255,255,0.9); margin: 5px 0 0 0; font-size: 0.85em;'>Stage: {stage_display}</p>
+                <p style='color: rgba(255,255,255,0.8); margin: 5px 0 0 0; font-size: 0.8em;'>Input: {step.tool_input[:50]}...</p>
+                {f"<p style='color: rgba(255,255,255,0.8); margin: 5px 0 0 0; font-size: 0.8em;'>⏱️ {step.execution_time:.2f}s</p>" if step.execution_time else ""}
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Use workflow_summary instead of workflow_report
+        if exec_result.workflow_summary:
+            st.markdown("### 📊 Workflow Summary")
+            st.markdown(f"""
+            <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                        padding: 15px; border-radius: 10px;'>
+                <p style='color: white; margin: 0; font-size: 0.9em;'>{exec_result.workflow_summary}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # Save this interaction
+    tool_calls_info = [
+        {
+            "step": step.step_id,
+            "tool": step.tool_name,
+            "status": step.status,
+            "execution_time": step.execution_time,
+            "stage": step.workflow_stage if step.workflow_stage else "N/A"
         }
-        self.reasoning_steps.append(step)
-        self.tool_calls.append({
-            'tool': action.tool,
-            'input': action.tool_input,
-            'timestamp': datetime.now().isoformat()
-        })
-        
-        with st.sidebar:
-            st.markdown(f"**Step {len(self.reasoning_steps)} - Reasoning**")
-            st.markdown(step['content'])
-            st.markdown(f"🔧 **Tool:** {step['tool']}")
-            st.markdown(f"📤 **Input:** `{step['input']}`")
-            st.divider()
-    
-    def on_agent_finish(self, finish, **kwargs):
-        if finish.log:
-            final_answer = finish.log
-            step = {
-                'type': 'answer',
-                'content': f"✅ {final_answer}",
-                'timestamp': datetime.now().isoformat()
-            }
-            with st.sidebar:
-                st.markdown(f"**Final Answer**")
-                st.success(step['content'])
-                st.divider()
+        for step in exec_result.plan.steps
+    ]
+
+    conversation_memory.save_interaction(
+        user_input=user_query,
+        ai_response=exec_result.final_answer,
+        tool_calls=tool_calls_info,
+        reasoning_step=" → ".join([s.tool_name for s in exec_result.plan.steps])
+    )
+
+    # Return the orchestrator's final synthesized response
+    return exec_result.final_answer
+
+     
 
 
-# ================= Agent Executor with Memory =================
 
-def setup_agent(conversation_memory: ConversationMemory):
-    """Create an agent executor with memory integration."""
-    
-    # Get optimized conversation history
-    chat_history = conversation_memory.get_context()
-    
-    # Create prompt with memory integration
-    system_prompt = """You are an AI assistant specialized in drug discovery and pharmaceutical research. You can ONLY use the tools that are explicitly provided to you.
-
-CRITICAL RULES:
-- You can ONLY use the tools listed in your available tools - no web search, no internet access, no external databases
-- If you don't have a tool to get specific information, clearly state this limitation
-- Do NOT pretend to search online or access external resources
-- Base your responses only on the tool results you receive
-- If a user asks for information you cannot obtain with available tools, explain what tools you would need
-- Be honest about your limitations when tools are missing
-
-TOOL SELECTION STRATEGY:
-- Use specific tools (FindDrug, FindProteinsFromDrug, etc.) when you need exact, focused information
-- Consider TextToAQL when you need to explore relationships, complex queries, or when specific tools don't cover the user's question
-- TextToAQL can handle broad biomedical questions and database relationships that other tools might not address
-- Choose the most appropriate tool based on the specific information requested
-
-CONVERSATION CONTEXT:
-You have access to our conversation history. Use this context to provide more personalized and relevant responses. Reference previous interactions when appropriate.
-
-When you need to use a tool, explain your reasoning clearly and use the appropriate tool for the task."""
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad")
-    ])
-    
-    return prompt, chat_history
-
-
-def agent_executor(user_query: str, conversation_memory: ConversationMemory):
-    """Execute agent with memory integration."""
-    try:
-        prompt, chat_history = setup_agent(conversation_memory)
-        
-        # Create agent with memory-aware prompt
-        agent = create_tool_calling_agent(llm, tools, prompt)
-        callback_handler = CustomCallbackHandler(conversation_memory)
-
-        agent_executor = AgentExecutor(
-            agent=agent, 
-            tools=tools, 
-            callbacks=[callback_handler], 
-            handle_parsing_errors=True,
-            verbose=True,
-            max_iterations=8,
-            early_stopping_method="generate",
-            return_intermediate_steps=True
-        )
-        
-        # Clear previous reasoning steps
-        if "reasoning_steps" in st.session_state:
-            st.session_state.reasoning_steps = []
-
-        # Execute with chat history
-        final_state = agent_executor.invoke({
-            "input": user_query,
-            "chat_history": chat_history
-        })
-
-        output_text = final_state["output"].strip()
-        
-        # Store the interaction in memory
-        reasoning_summary = " | ".join([step.get('content', '') for step in callback_handler.reasoning_steps])
-        conversation_memory.save_interaction(
-            user_input=user_query,
-            ai_response=output_text,
-            tool_calls=callback_handler.tool_calls,
-            reasoning_step=reasoning_summary
-        )
-        
-        try:
-            return json.loads(output_text)
-        except json.JSONDecodeError:
-            return output_text
-        
-    except Exception as e:
-        print(f"Agent execution error: {e}")
-        error_msg = f"❌ Error: {str(e)}"
-        st.sidebar.error(error_msg)
-        return error_msg
-
-
-# ================= Application =================
+# ================= Application Setup =================
 
 hide_streamlit_style = """
     <style>
-    /* Hide Streamlit header, footer, and menu */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
-    
-    /* Hide "Deploy" button */
     .stDeployButton {display: none;}
     
-    /* Remove padding and margins for full embed */
+    /* Global styling */
+    * {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Main container with gradient background */
+    .main {
+        background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+    }
+    
     .main .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
         max-width: 100%;
     }
     
-    /* Remove sidebar completely for embedded view */
-    .css-1d391kg {display: none;}
-    
-    /* Adjust chat message styling for embedding */
-    [data-testid="stChatMessage"] {
-        margin-bottom: 0.5rem;
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1e1e2f 0%, #2d2d44 100%);
     }
     
-    /* User message styling */
+    [data-testid="stSidebar"] > div:first-child {
+        background: transparent;
+    }
+    
+    /* User message with gradient */
     [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarUser"]) > div:first-child {
-        background: linear-gradient(90deg, #F3BB4F 0%, #E8A935 100%) !important;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
         color: white !important;
-        border-radius: 12px;
-        padding: 12px 16px;
+        border-radius: 18px;
+        padding: 16px 20px;
         border: none;
-        box-shadow: 0 2px 8px rgba(243, 187, 79, 0.2);
+        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+        backdrop-filter: blur(10px);
     }
 
-    /* Assistant message styling */
+    /* Assistant message with gradient */
     [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarAssistant"]) > div:first-child {
-        background: linear-gradient(90deg, #16ADA9 0%, #128A87 100%) !important;
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
         color: white !important;
-        border-radius: 12px;
-        padding: 12px 16px;
+        border-radius: 18px;
+        padding: 16px 20px;
         border: none;
-        box-shadow: 0 2px 8px rgba(22, 173, 169, 0.2);
+        box-shadow: 0 8px 24px rgba(240, 147, 251, 0.3);
+        backdrop-filter: blur(10px);
     }
     
-    /* Style chat input */
+    /* Avatar styling */
+    [data-testid="stChatMessageAvatarUser"], 
+    [data-testid="stChatMessageAvatarAssistant"] {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+    }
+    
+    /* Style chat input with glowing effect */
     .stChatInput > div {
-        border-radius: 25px;
-        border: 2px solid #16ADA9;
+        border-radius: 30px;
+        border: 2px solid transparent;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-clip: padding-box;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
     }
     
     .stChatInput input {
+        border-radius: 30px;
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
+        backdrop-filter: blur(10px);
+    }
+    
+    .stChatInput input::placeholder {
+        color: rgba(255, 255, 255, 0.6);
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
         border-radius: 25px;
+        padding: 10px 24px;
+        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        transition: all 0.3s ease;
     }
     
-    /* Remove extra spacing */
-    .element-container {
-        margin-bottom: 0.5rem;
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
     }
     
-    /* Responsive design for mobile embedding */
+    /* Welcome card styling */
+    .welcome-card {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        border: 2px solid rgba(102, 126, 234, 0.3);
+        border-radius: 20px;
+        padding: 30px;
+        margin: 20px 0;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.2);
+    }
+    
+    /* Feature badges */
+    .feature-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        margin: 5px;
+        font-size: 0.9em;
+        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+    }
+    
+    /* Responsive design */
     @media (max-width: 768px) {
         .main .block-container {
-            padding: 0.5rem;
+            padding: 1rem;
         }
         
         [data-testid="stChatMessage"] > div:first-child {
-            padding: 8px 12px;
+            padding: 12px 16px;
             font-size: 14px;
         }
+    }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    }
+    
+    /* Text color for better visibility */
+    h1, h2, h3, h4, h5, h6, p, li, span, div {
+        color: rgba(255, 255, 255, 0.9);
+    }
+    
+    /* Markdown content in messages */
+    [data-testid="stChatMessage"] p,
+    [data-testid="stChatMessage"] li,
+    [data-testid="stChatMessage"] span {
+        color: white !important;
     }
     </style>
 """
@@ -520,17 +559,13 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 load_dotenv()
-google_api_key = os.getenv("GOOGLE_API_KEY")
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-preview-05-20", 
-    google_api_key=google_api_key, 
-    temperature=0,
-    convert_system_message_to_human=True
-)
 
 def get_base64_image(image_path):
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode()
+    try:
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except FileNotFoundError:
+        return ""
 
 img_base64 = get_base64_image("logo.png")
 
@@ -539,41 +574,48 @@ img_base64 = get_base64_image("logo.png")
 session_id = create_session_id()
 conversation_memory = ConversationMemory(session_id)
 
-# Streamlit UI Logic
-st.markdown(
-    """
-    <style>
-    /* Change user message to bronze */
-    [data-testid="stChatMessage"]:has(div[data-testid="stMarkdownContainer"]) > div:first-child {
-        background-color: #F3BB4F !important;
-        color: white !important;
-        border-radius: 8px;
-        padding: 10px;
-    }
-
-    [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarAssistant"]) > div:first-child {
-        background-color: #16ADA9 !important;
-        color: white !important;
-        border-radius: 8px;
-        padding: 10px;
-    }
-    """,
-    unsafe_allow_html=True
-)
+# ================= Streamlit UI =================
 
 # Add clear memory button to top right
 col1, col2 = st.columns([6, 1])
 with col2:
-    if st.button("Clear Memory", type="secondary", help="Clear conversation history"):
+    if st.button("🗑️ Clear", type="secondary", help="Clear conversation history"):
         conversation_memory.chat_history.clear()
         st.session_state.messages = []
+        if 'orchestrator' in st.session_state:
+            del st.session_state.orchestrator
         st.rerun()
 
-st.chat_message("assistant").markdown(
-    "👋 **Welcome to NeuThera!**\n\n"
-    "You're currently using the **MVP** version of the app, which only includes a limited set of drug discovery tools. (Mostly due to limited resources)\n\n"
-)
+# Enhanced welcome message using chat message
+with st.chat_message("assistant"):
+    st.markdown("### 💊 **Welcome to NeuThera Enhanced!**")
+    st.markdown("**Next-Generation Multi-Agent Drug Discovery Platform**")
+    st.markdown("")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown("🧠 **Adaptive AI**")
+    with col2:
+        st.markdown("⚡ **Lightning Fast**")
+    with col3:
+        st.markdown("🔬 **Research-Grade**")
+    with col4:
+        st.markdown("🎯 **High Precision**")
+    
+    st.markdown("")
+    st.markdown("#### ✨ Advanced Capabilities:")
+    st.markdown("""
+    - **🧬 Intelligent Workflow Detection:** Automatically identifies multi-stage drug discovery processes
+    - **⚙️ Smart Error Recovery:** Advanced fallback strategies ensure continuous operation
+    - **🔍 Enhanced Result Synthesis:** Clear, actionable insights from complex data
+    - **💡 Optimized AQL Queries:** Faster database analysis with intelligent query generation
+    """)
+    
+    st.markdown("")
+    st.markdown("*Powered by advanced multi-agent orchestration | Real-time molecular analysis | Pharmaceutical intelligence*")
 
+
+# Initialize messages
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -583,22 +625,44 @@ if not st.session_state.messages and conversation_memory.chat_history.messages:
         role = "user" if isinstance(msg, HumanMessage) else "assistant"
         st.session_state.messages.append({"role": role, "content": msg.content})
 
+# Display chat messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if user_input := st.chat_input("Type your drug-related query..."):
+# Chat input
+if user_input := st.chat_input("🔬 Ask about drug discovery, molecular research, or pharmaceutical insights..."):
+    # Display user message
     st.chat_message("user").markdown(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
+    # Setup sidebar
     st.sidebar.empty()
-    st.sidebar.markdown(f"<div style='text-align: center;'><img src='data:image/png;base64,{img_base64}' width='175'></div>", unsafe_allow_html=True)
-    st.sidebar.markdown(f"<h1 style='text-align: center; color: #F3BB4F; font-size: 2rem;'>Research Agent</h1>", unsafe_allow_html=True)
+    if img_base64:
+        st.sidebar.markdown(f"""
+        <div style='text-align: center; margin-bottom: 20px;'>
+            <img src='data:image/png;base64,{img_base64}' width='150' style='border-radius: 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);'>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.sidebar.markdown(f"""
+    <h1 style='text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+               -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+               font-size: 1.8rem; margin-bottom: 20px;'>
+        Research Agent
+    </h1>
+    """, unsafe_allow_html=True)
     st.sidebar.divider()
 
-    with st.spinner("Thinking..."):
-        result = agent_executor(user_input, conversation_memory)
+    # Process query with enhanced multi-agent system
+    with st.spinner("🧬 Analyzing query with multi-agent orchestration..."):
+        try:
+            result = enhanced_multiagent_executor(user_input, conversation_memory)
+        except Exception as e:
+            st.error(f"⚠️ An error occurred: {str(e)}")
+            result = f"I apologize, but I encountered an error: {str(e)}. Please try rephrasing your question or contact support if the issue persists."
     
+    # Display assistant response
     with st.chat_message("assistant"):
         st.markdown(result)
 
