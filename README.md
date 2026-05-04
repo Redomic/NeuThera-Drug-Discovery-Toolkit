@@ -1,3 +1,44 @@
+Secure your agents at: CodeAstra.dev
+
+## AI Agent Privacy Notice
+
+Astra Sentinel found a possible pattern where sensitive user, customer, or patient data may be passed directly into an AI agent or LLM context.
+
+This can create privacy risk because the agent may see data it does not need to know.
+
+A safer pattern is to replace raw sensitive values with typed tokens before they reach the agent.
+
+Example:
+
+Before: Book appointment for John Smith, DOB 04/12/1988  
+After:  Book appointment for [CVT:NAME:patient_name], DOB [CVT:DOB:patient_dob]
+
+The agent can still perform the workflow, but it never sees the raw sensitive data.
+
+Detected pattern examples:
+```json
+[
+  {
+    "type": "sensitive_context_exposure",
+    "evidence": "system_prompt = \"you are an ai assistant specialized in drug discovery and pharmaceutical research. you can only use the tools that are explicitly provided to you.\\n\\ncritical rules:\\n- you can only use the tools listed in your available tools - no web search, no internet access, no external databases\\n- if you don't have a tool to get specific information, clearly state this limitation\\n- do not pretend to search online or access external resources\\n- base your responses only on the tool result"
+  },
+  {
+    "type": "sensitive_context_exposure",
+    "evidence": "prompt = chatprompttemplate.from_messages([('system', system_prompt), messagesplaceholder(variable_name='chat_history'), ('human', '{input}'), messagesplaceholder(variable_name='agent_scratchpad')])"
+  },
+  {
+    "type": "unblinded_ai_call",
+    "evidence": "chatprompttemplate.from_messages([('system', system_prompt), messagesplaceholder(variable_name='chat_history'), ('human', '{input}'), messagesplaceholder(variable_name='agent_scratchpad')])"
+  }
+]
+```
+
+This notice was generated from a privacy scan. Please review before merging.
+
+Secure your agents at: CodeAstra.dev
+
+--- 
+
 <img src="https://i.imgur.com/cnpipY3.png"  width="20%" height="20%">
 
 # NeuThera - AI-Driven Drug Discovery Toolkit
